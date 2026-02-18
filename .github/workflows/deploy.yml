@@ -1,0 +1,131 @@
+name: Deploy
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+    inputs:
+      server_host:
+        description: "Override SERVER_HOST"
+        required: false
+        type: string
+      server_port:
+        description: "Override SERVER_PORT"
+        required: false
+        type: string
+      server_user:
+        description: "Override SERVER_USER"
+        required: false
+        type: string
+      bot_token:
+        description: "Optional BOT_TOKEN for first-time deploy"
+        required: false
+        type: string
+      db_url:
+        description: "Optional DB_URL for database connection"
+        required: false
+        type: string
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    env:
+      SERVER_HOST: ${{ github.event.inputs.server_host || vars.SERVER_HOST || secrets.SERVER_HOST }}
+      SERVER_PORT: ${{ github.event.inputs.server_port || vars.SERVER_PORT || secrets.SERVER_PORT }}
+      SERVER_USER: ${{ github.event.inputs.server_user || vars.SERVER_USER || secrets.SERVER_USER }}
+      APP_URL: ${{ vars.APP_URL || secrets.APP_URL }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Validate Python syntax
+        run: python -m compileall -q .
+
+      - name: Resolve deployment variables
+        run: |
+          echo "RESOLVED_HOST=${SERVER_HOST}" >> $GITHUB_ENV
+          echo "RESOLVED_PORT=${SERVER_PORT:-22}" >> $GITHUB_ENV
+          echo "RESOLVED_USER=${SERVER_USER}" >> $GITHUB_ENV
+
+          if [ -z "${SERVER_HOST}" ]; then
+            echo "SERVER_HOST is not set" && exit 1
+          fi
+
+          if [ -z "${SERVER_USER}" ]; then
+            echo "SERVER_USER is not set" && exit 1
+          fi
+
+      - name: Resolve BOT_TOKEN (input or secret)
+        run: |
+          if [ -n "${{ github.event.inputs.bot_token }}" ]; then
+            echo "RESOLVED_BOT_TOKEN=${{ github.event.inputs.bot_token }}" >> $GITHUB_ENV
+          elif [ -n "${{ secrets.BOT_TOKEN }}" ]; then
+            echo "RESOLVED_BOT_TOKEN=${{ secrets.BOT_TOKEN }}" >> $GITHUB_ENV
+          else
+            echo "RESOLVED_BOT_TOKEN=" >> $GITHUB_ENV
+          fi
+
+      - name: Resolve DB_URL (input or vars)
+        run: |
+          if [ -n "${{ github.event.inputs.db_url }}" ]; then
+            echo "RESOLVED_DB_URL=${{ github.event.inputs.db_url }}" >> $GITHUB_ENV
+          elif [ -n "${{ vars.DB_URL }}" ]; then
+            echo "RESOLVED_DB_URL=${{ vars.DB_URL }}" >> $GITHUB_ENV
+          else
+            echo "RESOLVED_DB_URL=" >> $GITHUB_ENV
+          fi
+
+      - name: Create artifact
+        run: |
+          git archive --format=tar --prefix=rishehbot/ HEAD | gzip > rishehbot.tar.gz
+
+      - name: Add SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SERVER_SSH_KEY }}
+
+      - name: Upload artifact to server
+        run: |
+          scp -o StrictHostKeyChecking=no -P "${RESOLVED_PORT}" \
+          rishehbot.tar.gz \
+          "${RESOLVED_USER}@${RESOLVED_HOST}:/tmp/rishehbot.tar.gz"
+
+      - name: Deploy on server
+        run: |
+          ssh -o StrictHostKeyChecking=no -p "${RESOLVED_PORT}" \
+          "${RESOLVED_USER}@${RESOLVED_HOST}" << EOF
+          set -e
+
+          sudo mkdir -p /opt/rishehbot
+          sudo tar -xzf /tmp/rishehbot.tar.gz -C /opt/rishehbot --strip-components=1
+
+          sudo bash /opt/rishehbot/deploy/install_server.sh
+
+          BOT_TOKEN="${RESOLVED_BOT_TOKEN}"
+          DB_URL="${RESOLVED_DB_URL}"
+
+          # First-time deploy check
+          if [ -z "\$BOT_TOKEN" ]; then
+            if [ -f /opt/rishehbot/.env ] && grep -q '^BOT_TOKEN=' /opt/rishehbot/.env; then
+              echo "Existing .env found. Proceeding without new BOT_TOKEN."
+              BOT_TOKEN=""
+            else
+              echo "First-time deploy requires a BOT_TOKEN (provide as workflow input or secret)." >&2
+              exit 1
+            fi
+          fi
+
+          sudo bash /opt/rishehbot/deploy/deploy_bot.sh "\$BOT_TOKEN" "${RESOLVED_USER}" "\$DB_URL"
+
+          sudo systemctl is-active --quiet rishehbot \
+            && echo "Service active" \
+            || (sudo journalctl -u rishehbot -n 50 --no-pager; exit 1)
+
+          EOF
