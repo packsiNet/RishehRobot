@@ -1,3 +1,4 @@
+import logging
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, ConversationHandler, ContextTypes, filters
 from .config import TELEGRAM_BOT_TOKEN, ADMIN_USER_IDS, APP_URL
@@ -16,10 +17,14 @@ MAIN_BUTTONS = [
 
 KB = ReplyKeyboardMarkup(MAIN_BUTTONS, resize_keyboard=True, is_persistent=True)
 
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s | %(message)s")
+logger = logging.getLogger("rishehbot")
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     get_or_create_user(user.id, user.username, user.full_name)
     await update.message.reply_text("خوش اومدی! از منوی زیر انتخاب کن.", reply_markup=KB)
+    logger.info("/start handled for user_id=%s", user.id)
 
 async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
@@ -70,6 +75,7 @@ async def receive_question(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     create_ticket(user.id, q)
     await update.message.reply_text("سوالت ثبت شد. به‌زودی پاسخ می‌دیم.", reply_markup=KB)
+    logger.info("ticket created user_id=%s", user.id)
     return ConversationHandler.END
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -91,6 +97,7 @@ async def setcontent(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     set_content(key, value)
     await update.message.reply_text("ذخیره شد.")
+    logger.info("content set key=%s by user_id=%s", key, user.id)
 
 async def addorder(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
@@ -103,6 +110,13 @@ async def addorder(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"سفارش #{oid} ثبت شد.", reply_markup=KB)
     else:
         await update.message.reply_text("ابتدا /start را بزن.")
+    logger.info("addorder user_id=%s title=%s", user.id, title)
+
+async def health(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("OK ✅")
+
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
+    logger.exception("Unhandled exception: %s", context.error)
 
 def build_app():
     init_db()
@@ -117,6 +131,7 @@ def build_app():
                 pass
     app = Application.builder().token(TELEGRAM_BOT_TOKEN).post_init(post_init).build()
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("health", health))
     app.add_handler(CommandHandler("menu", menu))
     app.add_handler(CommandHandler("setcontent", setcontent))
     app.add_handler(CommandHandler("addorder", addorder))
@@ -130,6 +145,7 @@ def build_app():
         allow_reentry=True,
     )
     app.add_handler(conv)
+    app.add_error_handler(error_handler)
     return app
 
 def main():
