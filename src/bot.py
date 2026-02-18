@@ -1,6 +1,6 @@
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, ConversationHandler, ContextTypes, filters
-from .config import TELEGRAM_BOT_TOKEN, ADMIN_USER_IDS
+from .config import TELEGRAM_BOT_TOKEN, ADMIN_USER_IDS, APP_URL
 from .db import init_db, get_or_create_user, update_user_name, get_orders_for_user, set_content, get_content, create_ticket, add_order_for_user
 
 STATE_ASK_NAME = 1
@@ -106,7 +106,16 @@ async def addorder(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def build_app():
     init_db()
-    app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+    async def post_init(app: Application):
+        text = "ربات با موفقیت راه‌اندازی شد ✅"
+        if APP_URL:
+            text += f"\nآدرس برنامه: {APP_URL}"
+        for admin_id in ADMIN_USER_IDS:
+            try:
+                await app.bot.send_message(chat_id=admin_id, text=text)
+            except Exception:
+                pass
+    app = Application.builder().token(TELEGRAM_BOT_TOKEN).post_init(post_init).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("menu", menu))
     app.add_handler(CommandHandler("setcontent", setcontent))
