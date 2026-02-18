@@ -14,7 +14,7 @@ MAIN_BUTTONS = [
     ["🌿 ریشه چیه؟ 🌿"],
 ]
 
-KB = ReplyKeyboardMarkup(MAIN_BUTTONS, resize_keyboard=True)
+KB = ReplyKeyboardMarkup(MAIN_BUTTONS, resize_keyboard=True, is_persistent=True)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -54,6 +54,9 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
     await update.message.reply_text("از منو انتخاب کن.", reply_markup=KB)
     return ConversationHandler.END
+
+async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("منوی اصلی نمایش داده شد.", reply_markup=KB)
 
 async def receive_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     name = update.message.text.strip()
@@ -105,6 +108,7 @@ def build_app():
     init_db()
     app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("menu", menu))
     app.add_handler(CommandHandler("setcontent", setcontent))
     app.add_handler(CommandHandler("addorder", addorder))
     conv = ConversationHandler(
