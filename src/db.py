@@ -1,4 +1,3 @@
-import os
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
@@ -17,20 +16,40 @@ def connect():
     finally:
         conn.close()
 
+def _table_columns(conn: sqlite3.Connection, table: str) -> set[str]:
+    cur = conn.execute(f"PRAGMA table_info({table})")
+    return {row[1] for row in cur.fetchall()}
+
 def init_db():
     with connect() as conn:
         c = conn.cursor()
+        # Users table per client's schema
         c.execute(
             """
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                telegram_id INTEGER UNIQUE NOT NULL,
+                telegramid INTEGER UNIQUE NOT NULL,
                 username TEXT,
-                name TEXT,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                firstname TEXT,
+                lastname TEXT,
+                phonenumber TEXT,
+                createdat DATETIME DEFAULT CURRENT_TIMESTAMP
             )
             """
         )
+        # Backward compatibility: add missing columns if table pre-existed with old schema
+        cols = _table_columns(conn, "users")
+        expected = {
+            "telegramid": "INTEGER",
+            "username": "TEXT",
+            "firstname": "TEXT",
+            "lastname": "TEXT",
+            "phonenumber": "TEXT",
+            "createdat": "DATETIME",
+        }
+        for col, typ in expected.items():
+            if col not in cols:
+                c.execute(f"ALTER TABLE users ADD COLUMN {col} {typ}")
         c.execute(
             """
             CREATE TABLE IF NOT EXISTS orders (
@@ -80,29 +99,52 @@ def init_db():
             """
         )
 
-def get_or_create_user(telegram_id: int, username: str | None, name: str | None):
+def get_or_create_user(telegram_id: int, username: str | None, first_name: str | None, last_name: str | None):
     with connect() as conn:
         c = conn.cursor()
-        c.execute("SELECT * FROM users WHERE telegram_id=?", (telegram_id,))
+        # Try client schema first
+        c.execute("SELECT * FROM users WHERE telegramid=?", (telegram_id,))
         row = c.fetchone()
         if row:
+            c.execute(
+                "UPDATE users SET username=?, firstname=?, lastname=? WHERE telegramid=?",
+                (username, first_name, last_name, telegram_id),
+            )
             return row
+        # Fallback to old schema search
+        try:
+            c.execute("SELECT * FROM users WHERE telegram_id=?", (telegram_id,))
+            row_old = c.fetchone()
+        except sqlite3.OperationalError:
+            row_old = None
+        if row_old:
+            # Add new columns if needed and update
+            c.execute(
+                "UPDATE users SET telegramid=?, username=?, firstname=?, lastname=? WHERE id=?",
+                (telegram_id, username, first_name, last_name, row_old["id"]),
+            )
+            return row_old
+        # Insert new per client schema
         c.execute(
-            "INSERT INTO users (telegram_id, username, name) VALUES (?, ?, ?)",
-            (telegram_id, username, name),
+            "INSERT INTO users (telegramid, username, firstname, lastname) VALUES (?, ?, ?, ?)",
+            (telegram_id, username, first_name, last_name),
         )
         c.execute("SELECT * FROM users WHERE id=?", (c.lastrowid,))
         return c.fetchone()
 
-def update_user_name(telegram_id: int, name: str):
+def update_user_contact(telegram_id: int, phone: str):
     with connect() as conn:
         c = conn.cursor()
-        c.execute("UPDATE users SET name=? WHERE telegram_id=?", (name, telegram_id))
+        c.execute("UPDATE users SET phonenumber=? WHERE telegramid=?", (phone, telegram_id))
 
 def add_order_for_user(telegram_id: int, title: str):
     with connect() as conn:
         c = conn.cursor()
-        c.execute("SELECT id FROM users WHERE telegram_id=?", (telegram_id,))
+        # prefer client schema
+        try:
+            c.execute("SELECT id FROM users WHERE telegramid=?", (telegram_id,))
+        except sqlite3.OperationalError:
+            c.execute("SELECT id FROM users WHERE telegram_id=?", (telegram_id,))
         user = c.fetchone()
         if not user:
             return None
@@ -120,10 +162,10 @@ def get_orders_for_user(telegram_id: int):
             SELECT o.id, o.title, o.status, o.created_at
             FROM orders o
             JOIN users u ON u.id = o.user_id
-            WHERE u.telegram_id=?
+            WHERE (u.telegramid = ? OR u.telegram_id = ?)
             ORDER BY o.created_at DESC
             """,
-            (telegram_id,),
+            (telegram_id, telegram_id),
         )
         return [dict(r) for r in c.fetchall()]
 
