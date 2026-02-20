@@ -38,7 +38,18 @@ logger = logging.getLogger("rishehbot")
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     get_or_create_user(user.id, user.username, user.first_name, user.last_name)
-    await update.message.reply_text("خوش اومدی! از منوی زیر انتخاب کن.", reply_markup=KB)
+    welcome_msg = (
+        "🌿 ریشه؛ جایی برای اینکه حتی از دور هم کنار خانواده‌ت باشی\n"
+        "ریشه برای وقت‌هایی شکل گرفت که از خونه دوری، 🏠\n"
+        "اما نمی‌خوای فاصله باعث بشه از مراقبت و پیگیری جا بمونی. 🤍\n"
+        "برای اینکه از وضعیت سلامت عزیزت باخبر باشی، 🩺\n"
+        "نیازهاشون رو مدیریت کنی و با خیال راحت‌تری زندگی کنی. 🕊️\n"
+        "اینجا خدمات سلامت، همراهی و کارهای روزمره خانواده تو یک ساختار یکپارچه کنار هم قرار گرفته 🔗\n"
+        "تا بتونی با آگاهی بیشتر و دغدغه کمتر کنارشون بمونی. 🌱\n"
+        "اگه آماده‌ای این همراهی رو شروع کنی، قدم اول رو تو بردار. 👣\n"
+        "✨ از منو یکی از مسیرها رو انتخاب کن تا با هم جلو بریم."
+    )
+    await update.message.reply_text(welcome_msg, reply_markup=KB)
     logger.info("/start handled for user_id=%s", user.id)
 
 async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
