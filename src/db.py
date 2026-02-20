@@ -552,6 +552,79 @@ def get_orders_for_user_by_status(telegram_id: int, status_title: str):
         except sqlite3.OperationalError:
             return []
 
+def get_orders_for_user_by_statuses(telegram_id: int, status_titles: list[str]):
+    if not status_titles:
+        return []
+    with connect() as conn:
+        c = conn.cursor()
+        try:
+            placeholders = ",".join(["?"] * len(status_titles))
+            params = [telegram_id, telegram_id, *status_titles]
+            c.execute(
+                f"""
+                SELECT o.id, i.title AS title, s.title AS status, o.created_at
+                FROM orders o
+                JOIN users u ON u.id = o.userid
+                JOIN items i ON i.id = o.itemid
+                JOIN orderstatus s ON s.id = o.statusid
+                WHERE (u.telegramid = ? OR u.telegram_id = ?) AND s.title IN ({placeholders})
+                ORDER BY o.created_at DESC
+                """,
+                params,
+            )
+            return [dict(r) for r in c.fetchall()]
+        except sqlite3.OperationalError:
+            pass
+        try:
+            placeholders = ",".join(["?"] * len(status_titles))
+            params = [telegram_id, telegram_id, *status_titles]
+            c.execute(
+                f"""
+                SELECT o.id, o.title AS title, o.status AS status, o.created_at
+                FROM orders o
+                JOIN users u ON u.id = o.user_id
+                WHERE (u.telegramid = ? OR u.telegram_id = ?) AND o.status IN ({placeholders})
+                ORDER BY o.created_at DESC
+                """,
+                params,
+            )
+            return [dict(r) for r in c.fetchall()]
+        except sqlite3.OperationalError:
+            return []
+
+def get_order_by_id(order_id: int):
+    with connect() as conn:
+        c = conn.cursor()
+        try:
+            c.execute(
+                """
+                SELECT o.id, i.title AS title, s.title AS status, o.created_at
+                FROM orders o
+                JOIN items i ON i.id = o.itemid
+                JOIN orderstatus s ON s.id = o.statusid
+                WHERE o.id = ?
+                """,
+                (order_id,),
+            )
+            row = c.fetchone()
+            if row:
+                return dict(row)
+        except sqlite3.OperationalError:
+            pass
+        try:
+            c.execute(
+                """
+                SELECT o.id, o.title AS title, o.status AS status, o.created_at
+                FROM orders o
+                WHERE o.id = ?
+                """,
+                (order_id,),
+            )
+            row = c.fetchone()
+            return dict(row) if row else None
+        except sqlite3.OperationalError:
+            return None
+
 def create_order_for_item(telegram_id: int, item_id: int):
     with connect() as conn:
         c = conn.cursor()

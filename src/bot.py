@@ -7,6 +7,8 @@ from .db import (
     get_or_create_user,
     get_orders_for_user,
     get_orders_for_user_by_status,
+    get_orders_for_user_by_statuses,
+    get_order_by_id,
     get_order_stats_for_user,
     set_content,
     get_content,
@@ -104,20 +106,26 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(msg, reply_markup=ORDER_MENU)
         return ConversationHandler.END
     if text == "⏳ سفارش‌های درحال انجام":
-        lst = get_orders_for_user_by_status(user.id, "در حال انجام")
+        statuses = ["ثبت شده", "در دست بررسی", "تایید شده برای انجام"]
+        lst = get_orders_for_user_by_statuses(user.id, statuses)
         if not lst:
             await update.message.reply_text("سفارشی در حال انجام نیست.", reply_markup=ORDER_MENU)
             return ConversationHandler.END
-        lines = [f"#{o['id']} • {o['title']}" for o in lst]
-        await update.message.reply_text("\n".join(lines), reply_markup=ORDER_MENU)
+        inline_kb = InlineKeyboardMarkup(
+            [[InlineKeyboardButton(o["title"], callback_data=f"orderinfo:{o['id']}")] for o in lst]
+        )
+        await update.message.reply_text("سفارش‌ مورد نظر را انتخاب کن:", reply_markup=inline_kb)
         return ConversationHandler.END
     if text == "✅ سفارش‌های تکمیل شده":
-        lst = get_orders_for_user_by_status(user.id, "انجام شده")
+        statuses = ["انجام شده", "رد شده"]
+        lst = get_orders_for_user_by_statuses(user.id, statuses)
         if not lst:
             await update.message.reply_text("سفارشی تکمیل‌شده ثبت نشده.", reply_markup=ORDER_MENU)
             return ConversationHandler.END
-        lines = [f"#{o['id']} • {o['title']}" for o in lst]
-        await update.message.reply_text("\n".join(lines), reply_markup=ORDER_MENU)
+        inline_kb = InlineKeyboardMarkup(
+            [[InlineKeyboardButton(o["title"], callback_data=f"orderinfo:{o['id']}")] for o in lst]
+        )
+        await update.message.reply_text("سفارش‌ مورد نظر را انتخاب کن:", reply_markup=inline_kb)
         return ConversationHandler.END
     if text == "🔎 چطور به ریشه اعتماد کنم؟ 🔎":
         value = get_content("trust")
@@ -240,7 +248,7 @@ def build_app():
     app.add_handler(CommandHandler("menu", menu))
     app.add_handler(CommandHandler("setcontent", setcontent))
     app.add_handler(CommandHandler("addorder", addorder))
-    app.add_handler(CallbackQueryHandler(on_item_callback, pattern=r"^(item:\d+|order:\d+|back:cat:\d+)$"))
+    app.add_handler(CallbackQueryHandler(on_item_callback, pattern=r"^(item:\d+|order:\d+|back:cat:\d+|orderinfo:\d+)$"))
     conv = ConversationHandler(
         entry_points=[MessageHandler(filters.TEXT & ~filters.COMMAND, handle_menu)],
         states={
@@ -257,6 +265,18 @@ async def on_item_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     data = query.data
+    if data.startswith("orderinfo:"):
+        try:
+            oid = int(data.split(":", 1)[1])
+        except Exception:
+            return
+        order = get_order_by_id(oid)
+        if not order:
+            await query.message.reply_text("سفارش یافت نشد.")
+            return
+        msg = f"سفارش #{order['id']}\nعنوان: {order['title']}\nوضعیت: {order['status']}\nتاریخ: {order['created_at']}"
+        await query.message.reply_text(msg)
+        return
     if data.startswith("item:"):
         try:
             item_id = int(data.split(":", 1)[1])
