@@ -89,8 +89,7 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         items = get_items_by_category_title(text)
         if items:
             inline_kb = InlineKeyboardMarkup(
-                [[InlineKeyboardButton(i["title"], callback_data=f"item:{i['id']}")] for i in items] +
-                [[InlineKeyboardButton("⬅️ بازگشت", callback_data="back:cats")]]
+                [[InlineKeyboardButton(i["title"], callback_data=f"item:{i['id']}")] for i in items]
             )
             msg = cat["description"] if (cat and cat.get("description")) else "لطفاً یک مورد را انتخاب کن."
             await update.message.reply_text(msg, reply_markup=inline_kb)
@@ -103,8 +102,7 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if item:
         same_items = get_items_by_category_title(item["category_title"]) or []
         inline_kb = InlineKeyboardMarkup(
-            [[InlineKeyboardButton(i["title"], callback_data=f"item:{i['id']}")] for i in same_items] +
-            [[InlineKeyboardButton("⬅️ بازگشت", callback_data="back:cats")]]
+            [[InlineKeyboardButton(i["title"], callback_data=f"item:{i['id']}")] for i in same_items]
         )
         await update.message.reply_text(item.get("description") or "", reply_markup=inline_kb)
         return ConversationHandler.END
@@ -180,7 +178,7 @@ def build_app():
     app.add_handler(CommandHandler("menu", menu))
     app.add_handler(CommandHandler("setcontent", setcontent))
     app.add_handler(CommandHandler("addorder", addorder))
-    app.add_handler(CallbackQueryHandler(on_item_callback, pattern=r"^(item:\d+|back:cats)$"))
+    app.add_handler(CallbackQueryHandler(on_item_callback, pattern=r"^(item:\d+|order:\d+|back:cat:\d+)$"))
     conv = ConversationHandler(
         entry_points=[MessageHandler(filters.TEXT & ~filters.COMMAND, handle_menu)],
         states={
@@ -197,11 +195,6 @@ async def on_item_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     data = query.data
-    if data == "back:cats":
-        cats = get_categories_active()
-        kb = ReplyKeyboardMarkup([[c["title"]] for c in cats] + [[BACK_TEXT]], resize_keyboard=True, is_persistent=True)
-        await query.message.reply_text("بازگشت به دسته‌ها.", reply_markup=kb)
-        return
     if data.startswith("item:"):
         try:
             item_id = int(data.split(":", 1)[1])
@@ -209,14 +202,42 @@ async def on_item_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         item = get_item_by_id(item_id)
         if not item:
-            await query.message.reply_text("مورد یافت نشد.")
             return
-        same_items = get_items_by_category(item["categoryid"]) or []
-        inline_kb = InlineKeyboardMarkup(
-            [[InlineKeyboardButton(i["title"], callback_data=f"item:{i['id']}")] for i in same_items] +
-            [[InlineKeyboardButton("⬅️ بازگشت", callback_data="back:cats")]]
+        kb = InlineKeyboardMarkup(
+            [
+                [InlineKeyboardButton("✅ ثبت سفارش", callback_data=f"order:{item['id']}")],
+                [InlineKeyboardButton("⬅️ بازگشت", callback_data=f"back:cat:{item['categoryid']}")],
+            ]
         )
-        await query.message.reply_text(item.get("description") or "", reply_markup=inline_kb)
+        await query.message.edit_text(item.get("description") or "")
+        await query.message.edit_reply_markup(reply_markup=kb)
+        return
+    if data.startswith("order:"):
+        try:
+            item_id = int(data.split(":", 1)[1])
+        except Exception:
+            return
+        item = get_item_by_id(item_id)
+        if not item:
+            return
+        user = update.effective_user
+        add_order_for_user(user.id, item["title"])
+        kb = InlineKeyboardMarkup(
+            [[InlineKeyboardButton("⬅️ بازگشت", callback_data=f"back:cat:{item['categoryid']}")]]
+        )
+        await query.message.edit_text("سفارش ثبت شد ✅")
+        await query.message.edit_reply_markup(reply_markup=kb)
+        return
+    if data.startswith("back:cat:"):
+        try:
+            cat_id = int(data.split(":", 2)[2])
+        except Exception:
+            return
+        items = get_items_by_category(cat_id) or []
+        inline_kb = InlineKeyboardMarkup(
+            [[InlineKeyboardButton(i["title"], callback_data=f"item:{i['id']}")] for i in items]
+        )
+        await query.message.edit_reply_markup(reply_markup=inline_kb)
 
 def main():
     if not TELEGRAM_BOT_TOKEN:
