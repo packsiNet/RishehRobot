@@ -11,6 +11,10 @@ def connect():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     try:
+        conn.execute("PRAGMA foreign_keys = ON")
+    except Exception:
+        pass
+    try:
         yield conn
         conn.commit()
     finally:
@@ -122,6 +126,12 @@ def init_db():
             """
         )
         # Only create indexes if corresponding columns exist (handles legacy schema gracefully)
+        orders_cols = _table_columns(conn, "orders")
+        # Evolve legacy schema by adding missing columns
+        for col in ("itemid", "userid", "statusid"):
+            if col not in orders_cols:
+                c.execute(f"ALTER TABLE orders ADD COLUMN {col} INTEGER")
+        # Indexes when columns present
         orders_cols = _table_columns(conn, "orders")
         if "userid" in orders_cols:
             c.execute("CREATE INDEX IF NOT EXISTS idx_orders_userid ON orders(userid)")
@@ -396,7 +406,6 @@ def update_user_contact(telegram_id: int, phone: str):
 def add_order_for_user(telegram_id: int, title: str):
     with connect() as conn:
         c = conn.cursor()
-        # prefer client schema
         try:
             c.execute("SELECT id FROM users WHERE telegramid=?", (telegram_id,))
         except sqlite3.OperationalError:
@@ -404,9 +413,17 @@ def add_order_for_user(telegram_id: int, title: str):
         user = c.fetchone()
         if not user:
             return None
+        # Map title to item id (requires exact title match)
+        c.execute("SELECT id FROM items WHERE title=? AND active=1", (title,))
+        it = c.fetchone()
+        if not it:
+            return None
+        c.execute("SELECT id FROM orderstatus WHERE title='ثبت شده'")
+        st = c.fetchone()
+        statusid = st["id"] if st else 1
         c.execute(
-            "INSERT INTO orders (user_id, title) VALUES (?, ?)",
-            (user["id"], title),
+            "INSERT INTO orders (itemid, userid, statusid) VALUES (?, ?, ?)",
+            (it["id"], user["id"], statusid),
         )
         return c.lastrowid
 

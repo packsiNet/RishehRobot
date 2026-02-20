@@ -222,7 +222,7 @@ async def addorder(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if oid:
         await update.message.reply_text(f"سفارش #{oid} ثبت شد.", reply_markup=KB)
     else:
-        await update.message.reply_text("ابتدا /start را بزن.")
+        await update.message.reply_text("عنوان آیتم نامعتبر است یا ابتدا /start را بزن.")
     logger.info("addorder user_id=%s title=%s", user.id, title)
 
 async def health(update: Update, context: ContextTypes.DEFAULT_TYPE):
