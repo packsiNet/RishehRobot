@@ -1,7 +1,7 @@
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
-from .config import DB_PATH
+from .config import DB_PATH, ADMIN_USER_IDS
 
 DB_DIR = Path(DB_PATH).parent
 DB_DIR.mkdir(parents=True, exist_ok=True)
@@ -37,6 +37,7 @@ def init_db():
                 firstname TEXT,
                 lastname TEXT,
                 phonenumber TEXT,
+                roleid INTEGER DEFAULT 2,
                 createdat DATETIME DEFAULT CURRENT_TIMESTAMP
             )
             """
@@ -49,11 +50,17 @@ def init_db():
             "firstname": "TEXT",
             "lastname": "TEXT",
             "phonenumber": "TEXT",
+            "roleid": "INTEGER",
             "createdat": "DATETIME",
         }
         for col, typ in expected.items():
             if col not in cols:
                 c.execute(f"ALTER TABLE users ADD COLUMN {col} {typ}")
+        # Normalize roleid defaults
+        try:
+            c.execute("UPDATE users SET roleid=2 WHERE roleid IS NULL")
+        except Exception:
+            pass
         # Unique index on username (NULLs allowed, SQLite permits multiple NULLs)
         c.execute("CREATE UNIQUE INDEX IF NOT EXISTS ux_users_username ON users(username)")
         c.execute(
@@ -375,11 +382,19 @@ def get_or_create_user(telegram_id: int, username: str | None, first_name: str |
         c.execute("SELECT * FROM users WHERE telegramid=?", (telegram_id,))
         row = c.fetchone()
         if row:
-            c.execute(
-                "UPDATE users SET username=?, firstname=?, lastname=? WHERE telegramid=?",
-                (username, first_name, last_name, telegram_id),
-            )
-            return row
+            roleid = 1 if telegram_id in ADMIN_USER_IDS else 2
+            try:
+                c.execute(
+                    "UPDATE users SET username=?, firstname=?, lastname=?, roleid=? WHERE telegramid=?",
+                    (username, first_name, last_name, roleid, telegram_id),
+                )
+            except Exception:
+                c.execute(
+                    "UPDATE users SET username=?, firstname=?, lastname=? WHERE telegramid=?",
+                    (username, first_name, last_name, telegram_id),
+                )
+            c.execute("SELECT * FROM users WHERE telegramid=?", (telegram_id,))
+            return c.fetchone()
         # Fallback to old schema search
         try:
             c.execute("SELECT * FROM users WHERE telegram_id=?", (telegram_id,))
@@ -394,12 +409,31 @@ def get_or_create_user(telegram_id: int, username: str | None, first_name: str |
             )
             return row_old
         # Insert new per client schema
-        c.execute(
-            "INSERT INTO users (telegramid, username, firstname, lastname) VALUES (?, ?, ?, ?)",
-            (telegram_id, username, first_name, last_name),
-        )
+        roleid = 1 if telegram_id in ADMIN_USER_IDS else 2
+        try:
+            c.execute(
+                "INSERT INTO users (telegramid, username, firstname, lastname, roleid) VALUES (?, ?, ?, ?, ?)",
+                (telegram_id, username, first_name, last_name, roleid),
+            )
+        except Exception:
+            c.execute(
+                "INSERT INTO users (telegramid, username, firstname, lastname) VALUES (?, ?, ?, ?)",
+                (telegram_id, username, first_name, last_name),
+            )
         c.execute("SELECT * FROM users WHERE id=?", (c.lastrowid,))
         return c.fetchone()
+
+def is_admin(telegram_id: int) -> bool:
+    with connect() as conn:
+        c = conn.cursor()
+        try:
+            c.execute("SELECT roleid FROM users WHERE telegramid=?", (telegram_id,))
+            row = c.fetchone()
+            if row and row["roleid"] == 1:
+                return True
+        except Exception:
+            pass
+    return telegram_id in ADMIN_USER_IDS
 
 def update_user_contact(telegram_id: int, phone: str):
     with connect() as conn:

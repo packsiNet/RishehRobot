@@ -14,6 +14,7 @@ from .db import (
     get_order_by_id,
     get_order_stats_for_user,
     get_order_stats_for_identity,
+    is_admin,
     cancel_order_by_id,
     set_content,
     get_content,
@@ -37,8 +38,9 @@ MAIN_BUTTONS = [
     ["💬 اگه نمی‌دونی؛ از من بپرس! 💬"],
     ["🌿 ریشه چیه؟ 🌿"],
 ]
-
-KB = ReplyKeyboardMarkup(MAIN_BUTTONS, resize_keyboard=True, is_persistent=True)
+ADMIN_MAIN_BUTTONS = MAIN_BUTTONS + [["🛠 پنل ادمین"]]
+KB_USER = ReplyKeyboardMarkup(MAIN_BUTTONS, resize_keyboard=True, is_persistent=True)
+KB_ADMIN = ReplyKeyboardMarkup(ADMIN_MAIN_BUTTONS, resize_keyboard=True, is_persistent=True)
 BACK_TEXT = "⬅️ بازگشت"
 ORDER_MENU = ReplyKeyboardMarkup(
     [
@@ -68,14 +70,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "اگه آماده‌ای این همراهی رو شروع کنی، قدم اول رو تو بردار. 👣\n"
         "✨ از منو یکی از مسیرها رو انتخاب کن تا با هم جلو بریم."
     )
-    await update.message.reply_text(welcome_msg, reply_markup=KB)
+    kb = KB_ADMIN if is_admin(user.id) else KB_USER
+    await update.message.reply_text(welcome_msg, reply_markup=kb)
     logger.info("/start handled for user_id=%s", user.id)
 
 async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     user = update.effective_user
     if text == BACK_TEXT:
-        await update.message.reply_text("بازگشت به منوی اصلی.", reply_markup=KB)
+        await update.message.reply_text("بازگشت به منوی اصلی.", reply_markup=(KB_ADMIN if is_admin(user.id) else KB_USER))
         return ConversationHandler.END
     if text in ("🚀 شروع همراهی 🚀", "🚀 شروع همیاری 🚀"):
         get_or_create_user(user.id, user.username, user.first_name, user.last_name)
@@ -91,7 +94,7 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             kb = ReplyKeyboardMarkup([[c["title"]] for c in cats] + [[BACK_TEXT]], resize_keyboard=True, is_persistent=True)
             await update.message.reply_text(msg, reply_markup=kb)
         else:
-            await update.message.reply_text(msg, reply_markup=KB)
+            await update.message.reply_text(msg, reply_markup=(KB_ADMIN if is_admin(user.id) else KB_USER))
         return ConversationHandler.END
     if text == "📌 پیگیری سفارشاتم 📌":
         msg = (
@@ -100,6 +103,18 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "اینجا می‌تونی وضعیتش رو ببینی 👀"
         )
         await update.message.reply_text(msg, reply_markup=ORDER_MENU)
+        return ConversationHandler.END
+    if text == "🛠 پنل ادمین":
+        if not is_admin(user.id):
+            await update.message.reply_text("دسترسی نداری.", reply_markup=KB_USER)
+            return ConversationHandler.END
+        admin_msg = (
+            "🛠 پنل ادمین\n"
+            "برای مدیریت سریع محتوا از دستور زیر استفاده کن:\n"
+            "/setcontent <about|trust> <متن>\n\n"
+            "برای رصد سفارش‌ها از منوی پیگیری استفاده کن یا امکانات بیشتر را بگو تا اضافه کنم."
+        )
+        await update.message.reply_text(admin_msg, reply_markup=KB_ADMIN)
         return ConversationHandler.END
     if text == "📊 اعلام وضعیت سفارش‌ها":
         stats = get_order_stats_for_identity(user.id, user.username)
@@ -135,7 +150,7 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if text == "🔎 چطور به ریشه اعتماد کنم؟ 🔎":
         value = get_content("trust")
         msg = value if value else "محتوای اعتماد هنوز تنظیم نشده. از ادمین بخواهید /setcontent trust ... را اجرا کند."
-        await update.message.reply_text(msg, reply_markup=KB)
+        await update.message.reply_text(msg, reply_markup=(KB_ADMIN if is_admin(user.id) else KB_USER))
         return ConversationHandler.END
     if text == "💬 اگه نمی‌دونی؛ از من بپرس! 💬":
         support_msg = (
@@ -167,7 +182,7 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 [[InlineKeyboardButton(i["title"], callback_data=f"item:{i['id']}")] for i in items]
             )
             msg = cat["description"] if (cat and cat.get("description")) else "لطفاً یک مورد را انتخاب کن."
-            await update.message.reply_text(msg, reply_markup=inline_kb)
+        await update.message.reply_text(msg, reply_markup=inline_kb)
             return ConversationHandler.END
         if cat and cat.get("description"):
             kb = ReplyKeyboardMarkup([[c["title"]] for c in cats] + [[BACK_TEXT]], resize_keyboard=True, is_persistent=True)
@@ -181,11 +196,12 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         await update.message.reply_text(item.get("description") or "", reply_markup=inline_kb)
         return ConversationHandler.END
-    await update.message.reply_text("از منو انتخاب کن.", reply_markup=KB)
+    await update.message.reply_text("از منو انتخاب کن.", reply_markup=(KB_ADMIN if is_admin(user.id) else KB_USER))
     return ConversationHandler.END
 
 async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("منوی اصلی نمایش داده شد.", reply_markup=KB)
+    user = update.effective_user
+    await update.message.reply_text("منوی اصلی نمایش داده شد.", reply_markup=(KB_ADMIN if is_admin(user.id) else KB_USER))
 
 
 async def receive_question(update: Update, context: ContextTypes.DEFAULT_TYPE):
