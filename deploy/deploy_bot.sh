@@ -18,9 +18,22 @@ fi
 
 mkdir -p "$LOG_DIR" "$DATA_DIR"
 
-python3 -m venv "$VENV_DIR" || true
-"${VENV_DIR}/bin/pip" install --upgrade pip
-"${VENV_DIR}/bin/pip" install -r "${APP_DIR}/requirements.txt"
+# Ensure python3 and venv/pip are available
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "python3 is required" >&2
+  exit 1
+fi
+
+if ! python3 -Im ensurepip >/dev/null 2>&1; then
+  apt-get update -y
+  apt-get install -y python3-venv python3-pip || true
+fi
+
+# Create virtual environment robustly
+python3 -m venv "$VENV_DIR" 2>/dev/null || python3 -m venv --without-pip "$VENV_DIR"
+"${VENV_DIR}/bin/python" -m ensurepip --upgrade || true
+"${VENV_DIR}/bin/python" -m pip install --upgrade pip
+"${VENV_DIR}/bin/python" -m pip install -r "${APP_DIR}/requirements.txt"
 
 # Write .env
 if [ -n "$BOT_TOKEN" ]; then
