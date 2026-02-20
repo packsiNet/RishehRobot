@@ -171,7 +171,7 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if text == "🌿 ریشه چیه؟ 🌿":
         value = get_content("about")
         msg = value if value else "محتوای معرفی هنوز تنظیم نشده. از ادمین بخواهید /setcontent about ... را اجرا کند."
-        await update.message.reply_text(msg, reply_markup=KB)
+        await update.message.reply_text(msg, reply_markup=(KB_ADMIN if is_admin(user.id) else KB_USER))
         return ConversationHandler.END
     cats = get_categories_active()
     if any(c["title"] == text for c in cats):
@@ -182,7 +182,7 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 [[InlineKeyboardButton(i["title"], callback_data=f"item:{i['id']}")] for i in items]
             )
             msg = cat["description"] if (cat and cat.get("description")) else "لطفاً یک مورد را انتخاب کن."
-        await update.message.reply_text(msg, reply_markup=inline_kb)
+            await update.message.reply_text(msg, reply_markup=inline_kb)
             return ConversationHandler.END
         if cat and cat.get("description"):
             kb = ReplyKeyboardMarkup([[c["title"]] for c in cats] + [[BACK_TEXT]], resize_keyboard=True, is_persistent=True)
@@ -208,12 +208,13 @@ async def receive_question(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.message.text.strip()
     user = update.effective_user
     create_ticket(user.id, q)
-    await update.message.reply_text("سوالت ثبت شد. به‌زودی پاسخ می‌دیم.", reply_markup=KB)
+    await update.message.reply_text("سوالت ثبت شد. به‌زودی پاسخ می‌دیم.", reply_markup=(KB_ADMIN if is_admin(user.id) else KB_USER))
     logger.info("ticket created user_id=%s", user.id)
     return ConversationHandler.END
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("لغو شد.", reply_markup=KB)
+    user = update.effective_user
+    await update.message.reply_text("لغو شد.", reply_markup=(KB_ADMIN if is_admin(user.id) else KB_USER))
     return ConversationHandler.END
 
 async def setcontent(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -241,7 +242,7 @@ async def addorder(update: Update, context: ContextTypes.DEFAULT_TYPE):
     title = " ".join(context.args)
     oid = add_order_for_user(user.id, title)
     if oid:
-        await update.message.reply_text(f"سفارش #{oid} ثبت شد.", reply_markup=KB)
+        await update.message.reply_text(f"سفارش #{oid} ثبت شد.", reply_markup=(KB_ADMIN if is_admin(user.id) else KB_USER))
     else:
         await update.message.reply_text("عنوان آیتم نامعتبر است یا ابتدا /start را بزن.")
     logger.info("addorder user_id=%s title=%s", user.id, title)
