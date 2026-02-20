@@ -1095,6 +1095,46 @@ def get_item_by_title(title: str):
         row = c.fetchone()
         return dict(row) if row else None
 
+def get_unfinished_counts_for_item_ids(item_ids: list[int]):
+    if not item_ids:
+        return {}
+    with connect() as conn:
+        c = conn.cursor()
+        placeholders = ",".join(["?"] * len(item_ids))
+        try:
+            c.execute(
+                f"""
+                SELECT i.id AS itemid,
+                       SUM(CASE WHEN o.id IS NOT NULL AND (s.title IS NULL OR s.title NOT IN ('انجام شده','رد شده','لغو شده')) THEN 1 ELSE 0 END) AS cnt
+                FROM items i
+                LEFT JOIN orders o ON o.itemid = i.id
+                LEFT JOIN orderstatus s ON s.id = o.statusid
+                WHERE i.id IN ({placeholders})
+                GROUP BY i.id
+                """,
+                item_ids,
+            )
+            rows = c.fetchall()
+            return {r["itemid"]: (r["cnt"] or 0) for r in rows}
+        except sqlite3.OperationalError:
+            pass
+        try:
+            c.execute(
+                f"""
+                SELECT i.id AS itemid,
+                       SUM(CASE WHEN o.id IS NOT NULL AND (o.status IS NULL OR o.status NOT IN ('انجام شده','رد شده','لغو شده')) THEN 1 ELSE 0 END) AS cnt
+                FROM items i
+                LEFT JOIN orders o ON o.title = i.title
+                WHERE i.id IN ({placeholders})
+                GROUP BY i.id
+                """,
+                item_ids,
+            )
+            rows = c.fetchall()
+            return {r["itemid"]: (r["cnt"] or 0) for r in rows}
+        except sqlite3.OperationalError:
+            return {iid: 0 for iid in item_ids}
+
 def get_item_by_id(item_id: int):
     with connect() as conn:
         c = conn.cursor()

@@ -27,6 +27,7 @@ from .db import (
     get_item_by_title,
     get_item_by_id,
     create_order_for_item,
+    get_unfinished_counts_for_item_ids,
 )
 
 STATE_ASK_QUESTION = 1
@@ -204,17 +205,29 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if any(c["title"] == text for c in cats):
         cat = get_category_by_title(text)
         items = get_items_by_category_title(text)
-        if items:
-            inline_kb = InlineKeyboardMarkup(
-                [[InlineKeyboardButton(i["title"], callback_data=f"item:{i['id']}")] for i in items]
-            )
-            msg = cat["description"] if (cat and cat.get("description")) else "لطفاً یک مورد را انتخاب کن."
-            await update.message.reply_text(msg, reply_markup=inline_kb)
+        if is_admin(user.id):
+            if items:
+                ids = [i["id"] for i in items]
+                counts = get_unfinished_counts_for_item_ids(ids)
+                inline_kb = InlineKeyboardMarkup(
+                    [[InlineKeyboardButton(f"{i['title']} ({counts.get(i['id'], 0)})", callback_data=f"adminorders:{i['id']}")] for i in items]
+                )
+                await update.message.reply_text("آیتم را انتخاب کن:", reply_markup=inline_kb)
+                return ConversationHandler.END
+            await update.message.reply_text("آیتم فعالی در این دسته نیست.", reply_markup=KB_ADMIN)
             return ConversationHandler.END
-        if cat and cat.get("description"):
-            kb = ReplyKeyboardMarkup([[c["title"]] for c in cats] + [[BACK_TEXT]], resize_keyboard=True, is_persistent=True)
-            await update.message.reply_text(cat["description"], reply_markup=kb)
-            return ConversationHandler.END
+        else:
+            if items:
+                inline_kb = InlineKeyboardMarkup(
+                    [[InlineKeyboardButton(i["title"], callback_data=f"item:{i['id']}")] for i in items]
+                )
+                msg = cat["description"] if (cat and cat.get("description")) else "لطفاً یک مورد را انتخاب کن."
+                await update.message.reply_text(msg, reply_markup=inline_kb)
+                return ConversationHandler.END
+            if cat and cat.get("description"):
+                kb = ReplyKeyboardMarkup([[c["title"]] for c in cats] + [[BACK_TEXT]], resize_keyboard=True, is_persistent=True)
+                await update.message.reply_text(cat["description"], reply_markup=kb)
+                return ConversationHandler.END
     item = get_item_by_title(text)
     if item:
         same_items = get_items_by_category_title(item["category_title"]) or []
@@ -297,7 +310,7 @@ def build_app():
     app.add_handler(CommandHandler("menu", menu))
     app.add_handler(CommandHandler("setcontent", setcontent))
     app.add_handler(CommandHandler("addorder", addorder))
-    app.add_handler(CallbackQueryHandler(on_item_callback, pattern=r"^(item:\d+|order:\d+|back:cat:\d+|orderinfo:\d+|ordercancel:\d+)$"))
+    app.add_handler(CallbackQueryHandler(on_item_callback, pattern=r"^(item:\d+|order:\d+|back:cat:\d+|orderinfo:\d+|ordercancel:\d+|adminorders:\d+)$"))
     conv = ConversationHandler(
         entry_points=[MessageHandler(filters.TEXT & ~filters.COMMAND, handle_menu)],
         states={
@@ -341,6 +354,15 @@ async def on_item_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.message.edit_reply_markup(reply_markup=None)
         else:
             await query.message.reply_text("لغو سفارش ممکن نیست.")
+        return
+    if data.startswith("adminorders:"):
+        try:
+            iid = int(data.split(":", 1)[1])
+        except Exception:
+            return
+        counts = get_unfinished_counts_for_item_ids([iid])
+        cnt = counts.get(iid, 0)
+        await query.message.reply_text(f"سفارش‌های باز این آیتم: {cnt}")
         return
     if data.startswith("item:"):
         try:
