@@ -167,6 +167,34 @@ def init_db():
             WHERE NOT EXISTS (SELECT 1 FROM content WHERE key='trust')
             """
         )
+        c.execute(
+            """
+            UPDATE content
+            SET value = ?
+            WHERE key = 'trust'
+            """,
+            (
+                """
+🔒 چطور به ریشه اعتماد کنم؟
+این سؤال کاملاً طبیعیه.  وقتی پای سلامت و آرامش خانواده در میونه، اعتماد باید بر پایه‌ی واقعیت شکل بگیره، نه فقط وعده. ریشه حاصل تلاش تیمی جوانه  که خودشون هم تجربه‌ی دوری از خانواده رو داشتن و می‌دونن نگرانی از راه دور یعنی چی.  ریشه از دل همین نیاز واقعی شکل گرفته؛ برای اینکه فاصله، تبدیل به بی‌خبری نشه.
+🏛 پشتوانه ریشه
+ریشه در ایران، محصول استودیو نوآوری اندیشه است  و با کمک بچه‌های پارک علم و فناوری دانشگاه تهران توسعه پیدا کرده؛ ریشه تو ایران نماد اعتماد الکترونیک داره و تو روزهای کاری از طریق شماره تماس  ۰۲۱۷۱۰۵۷۲۰۷ در دسترسه.
+🧭 نقش ریشه دقیقاً چیه؟
+ریشه خودش ارائه‌دهنده خدمات نیست.  ما شبکه‌ای از ارائه‌دهندگان ارزیابی‌شده را کنار هم قرار دادیم و روی کیفیت اجرای خدمات نظارت می‌کنیم تا تجربه‌ای قابل اتکا شکل بگیره.
+تمرکز ما ارائه‌ی یکپارچه خدمات مورد نیاز سالمندان است؛  تا خانواده‌ها مجبور نباشند برای هر نیاز، مسیر جداگانه‌ای را طی کنند.
+📱 زیرساختی که در حال کامل‌تر شدن است
+ریشه یک اپلیکیشن کامل در ایران دارد که روی آدرس Risheh.app در ایران قابل دسترسه  و نسخه بین‌المللی‌مون هم در حال آماده‌سازیه.
+ما چطوری این اعتماد را حفظ می‌کنیم؟
+✔️ همکاری با مراکز و افراد معتبر
+✔️ شفافیت در تمام مراحل خدمت
+✔️ امکان پیگیری واقعی
+✔️ پشتیبانی پاسخ‌گو
+✔️ بررسی و جبران در صورت نارضایتی
+🤍 ریشه فقط برای ارائه یک خدمت ساخته نشده؛
+برای ساختن آرامشی طراحی شده که بدونید عزیزاتون تنها نیستن.
+""",
+            ),
+        )
 
         defaults = [
             ("🚨 تماس اضطراری 🚨", "توضیحات تماس اضطراری", 1),
@@ -305,6 +333,28 @@ def init_db():
                     (cat_id, it_title, it_desc, cat_id, it_title),
                 )
 
+        c.execute(
+            """
+            UPDATE categories
+            SET description = ?
+            WHERE title = ?
+            """,
+            (
+                """
+🚨 تماس اضطراری
+وقت‌هایی که مسیرهای ارتباطی با ایران دچار اختلال می‌شه 📵 و هیچ راهی برای باخبر شدن از خانواده نداری،
+در چنین شرایطی، ریشه تلاش می‌کنه پلی باشه بین تو و عزیزانت 🤍
+تا در حد توان، حال خانواده‌ت رو پیگیری کنه و نگذاره بی‌خبر بمونی.
+این خدمت کاملاً دلی و رایگانه 🌿
+در دوره‌هایی که ارتباطات محدود شد، ریشه با کمک هموطن‌های با‌معرفت در مناطق مرزی 🇮🇷 و با استفاده از رومینگ‌های در دسترس 📡، تلاش کرد صدای خانواده‌ها رو به هم برسونه.
+در حال حاضر با پایدار بودن شرایط ارتباطی ✅، این سرویس غیرفعاله؛
+اما اگر اختلالی ایجاد بشه، سریع دوباره فعالش می‌کنیم 🔄 تا نذاریم بی‌خبر بمونی.
+🤍 همراهی، فقط برای روزهای راحت نیست.
+""",
+                "🚨 تماس اضطراری 🚨",
+            ),
+        )
+
 def get_or_create_user(telegram_id: int, username: str | None, first_name: str | None, last_name: str | None):
     with connect() as conn:
         c = conn.cursor()
@@ -409,14 +459,28 @@ def create_order_for_item(telegram_id: int, item_id: int):
         user = c.fetchone()
         if not user:
             return None
-        c.execute("SELECT id FROM orderstatus WHERE title='ثبت شده'")
-        st = c.fetchone()
-        statusid = st["id"] if st else 1
-        c.execute(
-            "INSERT INTO orders (itemid, userid, statusid) VALUES (?, ?, ?)",
-            (item_id, user["id"], statusid),
-        )
-        return c.lastrowid
+        orders_cols = _table_columns(conn, "orders")
+        if {"itemid", "userid", "statusid"}.issubset(orders_cols):
+            c.execute("SELECT id FROM orderstatus WHERE title='ثبت شده'")
+            st = c.fetchone()
+            statusid = st["id"] if st else 1
+            c.execute(
+                "INSERT INTO orders (itemid, userid, statusid) VALUES (?, ?, ?)",
+                (item_id, user["id"], statusid),
+            )
+            return c.lastrowid
+        else:
+            c.execute("SELECT title FROM items WHERE id=?", (item_id,))
+            it = c.fetchone()
+            t = it["title"] if it else "درخواست"
+            try:
+                c.execute(
+                    "INSERT INTO orders (user_id, title) VALUES (?, ?)",
+                    (user["id"], t),
+                )
+                return c.lastrowid
+            except sqlite3.OperationalError:
+                return None
 
 def set_content(key: str, value: str):
     with connect() as conn:
@@ -434,7 +498,6 @@ def get_content(key: str) -> str | None:
         return row["value"] if row else None
 
 def create_ticket(telegram_id: int, question: str):
-    # If an item with this title exists, create an order in the new schema; otherwise, fallback is not performed
     with connect() as conn:
         c = conn.cursor()
         try:
@@ -444,28 +507,11 @@ def create_ticket(telegram_id: int, question: str):
         user = c.fetchone()
         if not user:
             return None
-        # Try to find item by title
-        c.execute("SELECT id FROM items WHERE title=? AND active=1", (title,))
-        item = c.fetchone()
-        if item:
-            # Get status id for 'ثبت شده'
-            c.execute("SELECT id FROM orderstatus WHERE title='ثبت شده'")
-            st = c.fetchone()
-            statusid = st["id"] if st else 1
-            c.execute(
-                "INSERT INTO orders (itemid, userid, statusid) VALUES (?, ?, ?)",
-                (item["id"], user["id"], statusid),
-            )
-            return c.lastrowid
-        # Legacy fallback: if no item found, insert into old orders table if exists
-        try:
-            c.execute(
-                "INSERT INTO orders (user_id, title) VALUES (?, ?)",
-                (user["id"], title),
-            )
-            return c.lastrowid
-        except sqlite3.OperationalError:
-            return None
+        c.execute(
+            "INSERT INTO tickets (user_id, question) VALUES (?, ?)",
+            (user["id"], question),
+        )
+        return c.lastrowid
 
 def get_categories_active():
     with connect() as conn:

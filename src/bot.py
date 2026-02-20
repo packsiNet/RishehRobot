@@ -88,8 +88,21 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(msg, reply_markup=KB)
         return ConversationHandler.END
     if text == "💬 اگه نمی‌دونی؛ از من بپرس! 💬":
-        await update.message.reply_text("سوالت رو بنویس، ثبتش می‌کنم.", reply_markup=KB)
-        return STATE_ASK_QUESTION
+        support_msg = (
+            "💬 اگه درباره خدمات، ثبت سفارش یا هر بخش دیگه‌ای سؤال داری،\n"
+            "برای این آیدی بنویس ✍️ یا ویس بفرست 🎙️\n"
+            "پیامت مستقیم برای تیم پشتیبانی ریشه ارسال می‌شه 📩\n"
+            "و کارشناسانمون در سریع‌ترین زمان ممکن بررسیش می‌کنن ⏳\n"
+            "تا بتونیم به بهترین شکل ممکن راهنماییت کنیم 🤍\n"
+            "کنارت هستیم.\n\n"
+            "🆔 آیدی پشتیبانی:\n"
+            "@rishehsupport"
+        )
+        inline_kb = InlineKeyboardMarkup(
+            [[InlineKeyboardButton("دکمه ارتباط با پشتیباهی", url="https://t.me/rishehsupport")]]
+        )
+        await update.message.reply_text(support_msg, reply_markup=inline_kb)
+        return ConversationHandler.END
     if text == "🌿 ریشه چیه؟ 🌿":
         value = get_content("about")
         msg = value if value else "محتوای معرفی هنوز تنظیم نشده. از ادمین بخواهید /setcontent about ... را اجرا کند."
