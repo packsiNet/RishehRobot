@@ -6,6 +6,7 @@ from .config import TELEGRAM_BOT_TOKEN, ADMIN_USER_IDS, APP_URL
 from .db import (
     init_db,
     get_or_create_user,
+    is_user_active,
     get_orders_for_user,
     get_orders_for_user_by_status,
     get_orders_for_user_by_statuses,
@@ -32,6 +33,10 @@ from .db import (
     get_order_detail_admin,
     get_all_statuses,
     update_order_status_id,
+    get_all_users_admin,
+    get_user_by_id,
+    set_user_role,
+    set_user_active,
 )
 
 STATE_ASK_QUESTION = 1
@@ -69,6 +74,16 @@ logger = logging.getLogger("rishehbot")
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     get_or_create_user(user.id, user.username, user.first_name, user.last_name)
+    # Blocked user check
+    if not is_user_active(user.id):
+        support_msg = (
+            "اکانت شما فعال نیست. برای فعال‌سازی با پشتیبانی تماس بگیرید."
+        )
+        inline_kb = InlineKeyboardMarkup(
+            [[InlineKeyboardButton(" ارتباط با پشتیبانی", url="https://t.me/rishehsupport")]]
+        )
+        await update.message.reply_text(support_msg, reply_markup=inline_kb)
+        return
     if is_admin(user.id):
         welcome_msg = "سلام! به پنل ادمین خوش اومدی."
         kb = KB_ADMIN
@@ -107,7 +122,21 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("مدیریت بخش آموزش - به‌زودی.", reply_markup=KB_ADMIN)
             return ConversationHandler.END
         if text == "👥 مدیریت کاربران":
-            await update.message.reply_text("مدیریت کاربران - به‌زودی.", reply_markup=KB_ADMIN)
+            users = get_all_users_admin()
+            if not users:
+                await update.message.reply_text("کاربری یافت نشد.", reply_markup=KB_ADMIN)
+                return ConversationHandler.END
+            def label(u):
+                if u.get("username"):
+                    return f"@{u['username']}"
+                fn = (u.get("firstname") or "").strip()
+                if fn:
+                    return fn
+                return f"کاربر {u['id']}"
+            kb = InlineKeyboardMarkup(
+                [[InlineKeyboardButton(label(u), callback_data=f"adminuser:{u['id']}")] for u in users]
+            )
+            await update.message.reply_text("یک کاربر را انتخاب کن:", reply_markup=kb)
             return ConversationHandler.END
     if text == BACK_TEXT:
         await update.message.reply_text("بازگشت به منوی اصلی.", reply_markup=(KB_ADMIN if is_admin(user.id) else KB_USER))
@@ -314,7 +343,7 @@ def build_app():
     app.add_handler(CommandHandler("menu", menu))
     app.add_handler(CommandHandler("setcontent", setcontent))
     app.add_handler(CommandHandler("addorder", addorder))
-    app.add_handler(CallbackQueryHandler(on_item_callback, pattern=r"^(item:\d+|order:\d+|back:cat:\d+|orderinfo:\d+|ordercancel:\d+|adminorders:\d+|adminorderinfo:\d+:\d+|adminstatus:\d+:\d+|adminstatusset:\d+:\d+)$"))
+    app.add_handler(CallbackQueryHandler(on_item_callback, pattern=r"^(item:\d+|order:\d+|back:cat:\d+|orderinfo:\d+|ordercancel:\d+|adminorders:\d+|adminorderinfo:\d+:\d+|adminstatus:\d+:\d+|adminstatusset:\d+:\d+|adminuser:\d+|adminuserrole:\d+|adminuserblock:\d+|adminusers)$"))
     conv = ConversationHandler(
         entry_points=[MessageHandler(filters.TEXT & ~filters.COMMAND, handle_menu)],
         states={
@@ -397,11 +426,10 @@ async def on_item_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         name = f"@{uname}" if uname else ((info.get("firstname") or "") + " " + (info.get("lastname") or "")).strip() or "کاربر"
         desc = info.get("item_description") or ""
         msg = (
-            f"نام ثبت‌کننده: {name}\n"
-            f"عنوان درخواست: {info.get('item_title') or ''}\n"
-            f"تاریخ ثبت: {j}\n"
-            f"آخرین وضعیت: {info.get('status') or ''}\n"
-            f"توضیحات: {desc}"
+            f"نام ثبت‌کننده: {name}\n\n"
+            f"عنوان درخواست: {info.get('item_title') or ''}\n\n"
+            f"تاریخ ثبت: {j}\n\n"
+            f"آخرین وضعیت: {info.get('status') or ''}\n\n"
         )
         kb = InlineKeyboardMarkup([
             [InlineKeyboardButton("تغییر وضعیت", callback_data=f"adminstatus:{oid}:{iid}")],
@@ -436,6 +464,75 @@ async def on_item_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.message.reply_text("وضعیت سفارش با موفقیت تغییر کرد ✅")
         else:
             await query.message.reply_text("تغییر وضعیت انجام نشد.")
+        return
+    if data == "adminusers":
+        users = get_all_users_admin()
+        if not users:
+            await query.message.reply_text("کاربری یافت نشد.")
+            return
+        def label(u):
+            if u.get("username"):
+                return f"@{u['username']}"
+            fn = (u.get("firstname") or "").strip()
+            if fn:
+                return fn
+            return f"کاربر {u['id']}"
+        kb = InlineKeyboardMarkup(
+            [[InlineKeyboardButton(label(u), callback_data=f"adminuser:{u['id']}")] for u in users]
+        )
+        await query.message.reply_text("یک کاربر را انتخاب کن:", reply_markup=kb)
+        return
+    if data.startswith("adminuser:"):
+        try:
+            uid = int(data.split(":", 1)[1])
+        except Exception:
+            return
+        u = get_user_by_id(uid)
+        if not u:
+            await query.message.reply_text("کاربر یافت نشد.")
+            return
+        name = f"@{u['username']}" if u.get('username') else ((u.get('firstname') or '') + ' ' + (u.get('lastname') or ''))
+        role = u.get('roleid')
+        active = u.get('active')
+        target_role = 2 if role == 1 else 1
+        role_label = "کاربر" if target_role == 2 else "ادمین"
+        block_label = "مسدود کردن کاربر" if active else "رفع مسدودی کاربر"
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton(f"تغییر نقش به {role_label}", callback_data=f"adminuserrole:{uid}")],
+            [InlineKeyboardButton(block_label, callback_data=f"adminuserblock:{uid}")],
+            [InlineKeyboardButton("⬅️ بازگشت", callback_data="adminusers")],
+        ])
+        await query.message.reply_text(f"مدیریت کاربر: {name}", reply_markup=kb)
+        return
+    if data.startswith("adminuserrole:"):
+        try:
+            uid = int(data.split(":", 1)[1])
+        except Exception:
+            return
+        u = get_user_by_id(uid)
+        if not u:
+            await query.message.reply_text("کاربر یافت نشد.")
+            return
+        new_role = 2 if u.get('roleid') == 1 else 1
+        if set_user_role(uid, new_role):
+            await query.message.reply_text("نقش کاربر با موفقیت تغییر کرد ✅")
+        else:
+            await query.message.reply_text("تغییر نقش انجام نشد.")
+        return
+    if data.startswith("adminuserblock:"):
+        try:
+            uid = int(data.split(":", 1)[1])
+        except Exception:
+            return
+        u = get_user_by_id(uid)
+        if not u:
+            await query.message.reply_text("کاربر یافت نشد.")
+            return
+        new_active = 0 if (u.get('active') or 0) != 0 else 1
+        if set_user_active(uid, new_active):
+            await query.message.reply_text("وضعیت کاربر به‌روزرسانی شد ✅")
+        else:
+            await query.message.reply_text("به‌روزرسانی انجام نشد.")
         return
     if data.startswith("item:"):
         try:

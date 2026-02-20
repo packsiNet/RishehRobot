@@ -38,6 +38,7 @@ def init_db():
                 lastname TEXT,
                 phonenumber TEXT,
                 roleid INTEGER DEFAULT 2,
+                active INTEGER NOT NULL DEFAULT 1,
                 createdat DATETIME DEFAULT CURRENT_TIMESTAMP
             )
             """
@@ -51,6 +52,7 @@ def init_db():
             "lastname": "TEXT",
             "phonenumber": "TEXT",
             "roleid": "INTEGER",
+            "active": "INTEGER",
             "createdat": "DATETIME",
         }
         for col, typ in expected.items():
@@ -59,6 +61,11 @@ def init_db():
         # Normalize roleid defaults
         try:
             c.execute("UPDATE users SET roleid=2 WHERE roleid IS NULL")
+        except Exception:
+            pass
+        # Normalize active defaults
+        try:
+            c.execute("UPDATE users SET active=1 WHERE active IS NULL")
         except Exception:
             pass
         # Unique index on username (NULLs allowed, SQLite permits multiple NULLs)
@@ -430,7 +437,7 @@ def get_or_create_user(telegram_id: int, username: str | None, first_name: str |
         roleid = 1 if telegram_id in ADMIN_USER_IDS else 2
         try:
             c.execute(
-                "INSERT INTO users (telegramid, username, firstname, lastname, roleid) VALUES (?, ?, ?, ?, ?)",
+                "INSERT INTO users (telegramid, username, firstname, lastname, roleid, active) VALUES (?, ?, ?, ?, ?, 1)",
                 (telegram_id, username, first_name, last_name, roleid),
             )
         except Exception:
@@ -452,6 +459,43 @@ def is_admin(telegram_id: int) -> bool:
         except Exception:
             pass
     return telegram_id in ADMIN_USER_IDS
+
+def is_user_active(telegram_id: int) -> bool:
+    with connect() as conn:
+        c = conn.cursor()
+        try:
+            c.execute("SELECT active FROM users WHERE telegramid=?", (telegram_id,))
+            row = c.fetchone()
+            if row is None:
+                return True
+            return (row["active"] or 0) != 0
+        except Exception:
+            return True
+
+def get_all_users_admin():
+    with connect() as conn:
+        c = conn.cursor()
+        c.execute("SELECT id, telegramid, username, firstname, lastname, roleid, active FROM users ORDER BY id DESC")
+        return [dict(r) for r in c.fetchall()]
+
+def get_user_by_id(user_id: int):
+    with connect() as conn:
+        c = conn.cursor()
+        c.execute("SELECT id, telegramid, username, firstname, lastname, roleid, active FROM users WHERE id=?", (user_id,))
+        row = c.fetchone()
+        return dict(row) if row else None
+
+def set_user_role(user_id: int, roleid: int) -> bool:
+    with connect() as conn:
+        c = conn.cursor()
+        c.execute("UPDATE users SET roleid=? WHERE id=?", (roleid, user_id))
+        return c.rowcount > 0
+
+def set_user_active(user_id: int, active: int) -> bool:
+    with connect() as conn:
+        c = conn.cursor()
+        c.execute("UPDATE users SET active=? WHERE id=?", (active, user_id))
+        return c.rowcount > 0
 
 def update_user_contact(telegram_id: int, phone: str):
     with connect() as conn:
@@ -1253,7 +1297,7 @@ def get_all_statuses():
     with connect() as conn:
         c = conn.cursor()
         try:
-            c.execute("SELECT id, title FROM orderstatus WHERE basestatus=1 ORDER BY id ASC")
+            c.execute("SELECT id, title FROM orderstatus WHERE basestatus=0 ORDER BY id ASC")
             return [dict(r) for r in c.fetchall()]
         except sqlite3.OperationalError:
             pass
