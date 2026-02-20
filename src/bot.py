@@ -72,6 +72,45 @@ ORDER_MENU = ReplyKeyboardMarkup(
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s | %(message)s")
 logger = logging.getLogger("rishehbot")
 
+def _resolve_admin_ids():
+    try:
+        ids = []
+        try:
+            ids.extend(get_admin_telegram_ids())
+        except Exception:
+            pass
+        ids.extend(ADMIN_USER_IDS)
+        out = []
+        seen = set()
+        for x in ids:
+            try:
+                xi = int(str(x).strip())
+            except Exception:
+                continue
+            if xi not in seen:
+                seen.add(xi)
+                out.append(xi)
+        logger.info("admin recipients resolved count=%d ids=%s", len(out), out)
+        return out
+    except Exception as e:
+        logger.exception("resolve admin ids failed: %s", e)
+        return list(ADMIN_USER_IDS)
+
+async def notify_admins(context: ContextTypes.DEFAULT_TYPE, text: str) -> int:
+    ids = _resolve_admin_ids()
+    if not ids:
+        logger.warning("no admin recipients to notify")
+        return 0
+    ok = 0
+    for aid in ids:
+        try:
+            await context.bot.send_message(chat_id=aid, text=text)
+            ok += 1
+        except Exception as e:
+            logger.warning("notify admin %s failed: %s", aid, e)
+    logger.info("admin notify success=%d/%d", ok, len(ids))
+    return ok
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     get_or_create_user(user.id, user.username, user.first_name, user.last_name)
@@ -323,15 +362,10 @@ async def addorder(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if order and order.get("created_at"):
                 j = to_jalali_str(order["created_at"])
             name = (user.first_name or "").strip() or (f"@{user.username}" if user.username else "کاربر")
-            admins = set(get_admin_telegram_ids() + ADMIN_USER_IDS)
             msg = f"سفارش جدید\nکاربر: {name}\nعنوان: {title}\nتاریخ: {j}"
-            for aid in admins:
-                try:
-                    await context.bot.send_message(chat_id=aid, text=msg)
-                except Exception:
-                    pass
-        except Exception:
-            pass
+            await notify_admins(context, msg)
+        except Exception as e:
+            logger.warning("notify admins on /addorder failed: %s", e)
     else:
         await update.message.reply_text("عنوان آیتم نامعتبر است یا ابتدا /start را بزن.")
     logger.info("addorder user_id=%s title=%s", user.id, title)
@@ -484,9 +518,13 @@ async def on_item_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     info2 = get_order_detail_admin(oid)
                     st_title = info2.get("status") if info2 else None
                     it_title = info2.get("item_title") if info2 else ""
-                    await context.bot.send_message(chat_id=info["telegramid"], text=f"وضعیت سفارش «{it_title}» به «{st_title or ''}» تغییر کرد")
-            except Exception:
-                pass
+                    try:
+                        await context.bot.send_message(chat_id=info["telegramid"], text=f"وضعیت سفارش «{it_title}» به «{st_title or ''}» تغییر کرد")
+                        logger.info("status change notified to user %s for order %s", info["telegramid"], oid)
+                    except Exception as e:
+                        logger.warning("notify user %s on status change failed: %s", info["telegramid"], e)
+            except Exception as e:
+                logger.warning("prepare user status notification failed: %s", e)
         else:
             await query.message.reply_text("تغییر وضعیت انجام نشد.")
         return
@@ -596,15 +634,10 @@ async def on_item_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ts = order.get("created_at") if order else None
             j = to_jalali_str(ts) if ts else ""
             name = (user.first_name or "").strip() or (f"@{user.username}" if user.username else "کاربر")
-            admins = set(get_admin_telegram_ids() + ADMIN_USER_IDS)
             msg = f"سفارش جدید\nکاربر: {name}\nعنوان: {item['title']}\nتاریخ: {j}"
-            for aid in admins:
-                try:
-                    await context.bot.send_message(chat_id=aid, text=msg)
-                except Exception:
-                    pass
-        except Exception:
-            pass
+            await notify_admins(context, msg)
+        except Exception as e:
+            logger.warning("notify admins on new order failed: %s", e)
         return
     if data.startswith("back:cat:"):
         try:
