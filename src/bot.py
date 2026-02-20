@@ -34,7 +34,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     user = update.effective_user
-    if text == "🚀 شروع همراهی 🚀":
+    if text in ("🚀 شروع همراهی 🚀", "🚀 شروع همیاری 🚀"):
         get_or_create_user(user.id, user.username, user.first_name, user.last_name)
         cats = get_categories_active()
         msg = (
