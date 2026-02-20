@@ -28,6 +28,10 @@ from .db import (
     get_item_by_id,
     create_order_for_item,
     get_unfinished_counts_for_item_ids,
+    get_orders_by_item_admin,
+    get_order_detail_admin,
+    get_all_statuses,
+    update_order_status_id,
 )
 
 STATE_ASK_QUESTION = 1
@@ -310,7 +314,7 @@ def build_app():
     app.add_handler(CommandHandler("menu", menu))
     app.add_handler(CommandHandler("setcontent", setcontent))
     app.add_handler(CommandHandler("addorder", addorder))
-    app.add_handler(CallbackQueryHandler(on_item_callback, pattern=r"^(item:\d+|order:\d+|back:cat:\d+|orderinfo:\d+|ordercancel:\d+|adminorders:\d+)$"))
+    app.add_handler(CallbackQueryHandler(on_item_callback, pattern=r"^(item:\d+|order:\d+|back:cat:\d+|orderinfo:\d+|ordercancel:\d+|adminorders:\d+|adminorderinfo:\d+:\d+|adminstatus:\d+:\d+|adminstatusset:\d+:\d+)$"))
     conv = ConversationHandler(
         entry_points=[MessageHandler(filters.TEXT & ~filters.COMMAND, handle_menu)],
         states={
@@ -360,9 +364,78 @@ async def on_item_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             iid = int(data.split(":", 1)[1])
         except Exception:
             return
-        counts = get_unfinished_counts_for_item_ids([iid])
-        cnt = counts.get(iid, 0)
-        await query.message.reply_text(f"سفارش‌های باز این آیتم: {cnt}")
+        orders = get_orders_by_item_admin(iid)
+        if not orders:
+            await query.message.reply_text("برای این آیتم سفارشی یافت نشد.")
+            return
+        def name_of(o):
+            uname = o.get("username") or ""
+            if uname:
+                return f"@{uname}"
+            fn = (o.get("firstname") or "").strip()
+            ln = (o.get("lastname") or "").strip()
+            full = (fn + " " + ln).strip()
+            return full if full else "کاربر"
+        kb = InlineKeyboardMarkup(
+            [[InlineKeyboardButton(name_of(o), callback_data=f"adminorderinfo:{o['id']}:{iid}")] for o in orders]
+        )
+        await query.message.reply_text("سفارش مورد نظر را انتخاب کن:", reply_markup=kb)
+        return
+    if data.startswith("adminorderinfo:"):
+        try:
+            _, oid, iid = data.split(":", 2)
+            oid = int(oid); iid = int(iid)
+        except Exception:
+            return
+        info = get_order_detail_admin(oid)
+        if not info:
+            await query.message.reply_text("سفارش یافت نشد.")
+            return
+        ts = info.get("created_at") or ""
+        j = to_jalali_str(ts)
+        uname = info.get("username") or ""
+        name = f"@{uname}" if uname else ((info.get("firstname") or "") + " " + (info.get("lastname") or "")).strip() or "کاربر"
+        desc = info.get("item_description") or ""
+        msg = (
+            f"نام ثبت‌کننده: {name}\n"
+            f"عنوان درخواست: {info.get('item_title') or ''}\n"
+            f"تاریخ ثبت: {j}\n"
+            f"آخرین وضعیت: {info.get('status') or ''}\n"
+            f"توضیحات: {desc}"
+        )
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("تغییر وضعیت", callback_data=f"adminstatus:{oid}:{iid}")],
+            [InlineKeyboardButton("⬅️ بازگشت", callback_data=f"adminorders:{iid}")],
+        ])
+        await query.message.reply_text(msg, reply_markup=kb)
+        return
+    if data.startswith("adminstatus:"):
+        try:
+            _, oid, iid = data.split(":", 2)
+            oid = int(oid); iid = int(iid)
+        except Exception:
+            return
+        sts = get_all_statuses()
+        if not sts:
+            await query.message.reply_text("وضعیتی برای تغییر وجود ندارد.")
+            return
+        kb = InlineKeyboardMarkup(
+            [[InlineKeyboardButton(s["title"], callback_data=f"adminstatusset:{oid}:{s['id'] or 0}")] for s in sts]
+            + [[InlineKeyboardButton("⬅️ بازگشت", callback_data=f"adminorderinfo:{oid}:{iid}")]]
+        )
+        await query.message.reply_text("یک وضعیت را انتخاب کن:", reply_markup=kb)
+        return
+    if data.startswith("adminstatusset:"):
+        try:
+            _, oid, sid = data.split(":", 2)
+            oid = int(oid); sid = int(sid)
+        except Exception:
+            return
+        ok = update_order_status_id(oid, sid if sid != 0 else None)
+        if ok:
+            await query.message.reply_text("وضعیت سفارش با موفقیت تغییر کرد ✅")
+        else:
+            await query.message.reply_text("تغییر وضعیت انجام نشد.")
         return
     if data.startswith("item:"):
         try:

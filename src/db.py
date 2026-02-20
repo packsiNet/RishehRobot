@@ -1150,6 +1150,137 @@ def get_item_by_id(item_id: int):
         row = c.fetchone()
         return dict(row) if row else None
 
+def get_orders_by_item_admin(item_id: int):
+    with connect() as conn:
+        c = conn.cursor()
+        # New schema
+        try:
+            c.execute(
+                """
+                SELECT o.id, u.username, u.firstname, u.lastname
+                FROM orders o
+                JOIN users u ON u.id=o.userid
+                WHERE o.itemid=?
+                ORDER BY o.id DESC
+                """,
+                (item_id,),
+            )
+            rows = c.fetchall()
+            if rows:
+                return [dict(r) for r in rows]
+        except sqlite3.OperationalError:
+            pass
+        # Legacy schema: match by item title
+        try:
+            c.execute("SELECT title FROM items WHERE id=?", (item_id,))
+            it = c.fetchone()
+            if not it:
+                return []
+            title = it["title"]
+            c.execute(
+                """
+                SELECT o.id, u.username, u.firstname, u.lastname
+                FROM orders o
+                JOIN users u ON u.id=o.user_id
+                WHERE o.title=?
+                ORDER BY o.id DESC
+                """,
+                (title,),
+            )
+            return [dict(r) for r in c.fetchall()]
+        except sqlite3.OperationalError:
+            return []
+
+def get_order_detail_admin(order_id: int):
+    with connect() as conn:
+        c = conn.cursor()
+        # New schema
+        try:
+            c.execute(
+                """
+                SELECT o.id, o.itemid, o.userid, u.username, u.firstname, u.lastname,
+                       i.title AS item_title, i.description AS item_description,
+                       s.title AS status, o.created_at
+                FROM orders o
+                JOIN users u ON u.id=o.userid
+                JOIN items i ON i.id=o.itemid
+                LEFT JOIN orderstatus s ON s.id=o.statusid
+                WHERE o.id=?
+                """,
+                (order_id,),
+            )
+            row = c.fetchone()
+            if row:
+                return dict(row)
+        except sqlite3.OperationalError:
+            pass
+        # Legacy schema
+        try:
+            c.execute(
+                """
+                SELECT o.id, NULL AS itemid, o.user_id AS userid, u.username, u.firstname, u.lastname,
+                       o.title AS item_title,
+                       (SELECT i.description FROM items i WHERE i.title=o.title LIMIT 1) AS item_description,
+                       o.status AS status, o.created_at
+                FROM orders o
+                JOIN users u ON u.id=o.user_id
+                WHERE o.id=?
+                """,
+                (order_id,),
+            )
+            row = c.fetchone()
+            return dict(row) if row else None
+        except sqlite3.OperationalError:
+            return None
+
+def get_all_statuses():
+    with connect() as conn:
+        c = conn.cursor()
+        try:
+            c.execute("SELECT id, title FROM orderstatus ORDER BY id ASC")
+            return [dict(r) for r in c.fetchall()]
+        except sqlite3.OperationalError:
+            pass
+        try:
+            c.execute("SELECT DISTINCT status AS title FROM orders WHERE status IS NOT NULL")
+            return [{"id": None, "title": r["title"]} for r in c.fetchall()]
+        except sqlite3.OperationalError:
+            return []
+
+def update_order_status_id(order_id: int, status_id: int | None, status_title: str | None = None) -> bool:
+    with connect() as conn:
+        c = conn.cursor()
+        # Prefer new schema by status id
+        if status_id is not None:
+            try:
+                c.execute("UPDATE orders SET statusid=? WHERE id=?", (status_id, order_id))
+                return c.rowcount > 0
+            except sqlite3.OperationalError:
+                pass
+        # Fallback by title (new schema resolving id)
+        if status_title is not None:
+            try:
+                c.execute("SELECT id FROM orderstatus WHERE title=?", (status_title,))
+                st = c.fetchone()
+                if st:
+                    c.execute("UPDATE orders SET statusid=? WHERE id=?", (st["id"], order_id))
+                    return c.rowcount > 0
+            except sqlite3.OperationalError:
+                pass
+        # Legacy schema: set textual status
+        try:
+            title = status_title
+            if title is None and status_id is not None:
+                c.execute("SELECT title FROM orderstatus WHERE id=?", (status_id,))
+                r = c.fetchone()
+                title = r["title"] if r else None
+            if title is None:
+                return False
+            c.execute("UPDATE orders SET status=? WHERE id=?", (title, order_id))
+            return c.rowcount > 0
+        except sqlite3.OperationalError:
+            return False
+
 def add_item(category_id: int, title: str, description: str | None = None, active: int = 1):
     with connect() as conn:
         c = conn.cursor()
