@@ -418,13 +418,34 @@ def add_order_for_user(telegram_id: int, title: str):
         it = c.fetchone()
         if not it:
             return None
-        c.execute("SELECT id FROM orderstatus WHERE title='ثبت شده'")
-        st = c.fetchone()
-        statusid = st["id"] if st else 1
-        c.execute(
-            "INSERT INTO orders (itemid, userid, statusid) VALUES (?, ?, ?)",
-            (it["id"], user["id"], statusid),
-        )
+        # Dynamic insert like create_order_for_item
+        orders_cols = _table_columns(conn, "orders")
+        statusid = None
+        if "statusid" in orders_cols:
+            try:
+                c.execute("SELECT id FROM orderstatus WHERE title='ثبت شده'")
+                st = c.fetchone()
+                statusid = st["id"] if st else None
+            except sqlite3.OperationalError:
+                statusid = None
+        cols = []
+        vals = []
+        if "itemid" in orders_cols:
+            cols.append("itemid"); vals.append(it["id"])
+        if "userid" in orders_cols:
+            cols.append("userid"); vals.append(user["id"])
+        if "statusid" in orders_cols and statusid is not None:
+            cols.append("statusid"); vals.append(statusid)
+        if "user_id" in orders_cols:
+            cols.append("user_id"); vals.append(user["id"])
+        if "title" in orders_cols:
+            cols.append("title"); vals.append(title)
+        if "status" in orders_cols:
+            cols.append("status"); vals.append("ثبت شده")
+        if not cols:
+            return None
+        placeholders = ",".join(["?"] * len(vals))
+        c.execute(f"INSERT INTO orders ({','.join(cols)}) VALUES ({placeholders})", vals)
         return c.lastrowid
 
 def get_orders_for_user(telegram_id: int):
@@ -653,28 +674,39 @@ def create_order_for_item(telegram_id: int, item_id: int):
         user = c.fetchone()
         if not user:
             return None
+        # Prepare dynamic insert based on available columns (legacy/new schema)
         orders_cols = _table_columns(conn, "orders")
-        if {"itemid", "userid", "statusid"}.issubset(orders_cols):
-            c.execute("SELECT id FROM orderstatus WHERE title='ثبت شده'")
-            st = c.fetchone()
-            statusid = st["id"] if st else 1
-            c.execute(
-                "INSERT INTO orders (itemid, userid, statusid) VALUES (?, ?, ?)",
-                (item_id, user["id"], statusid),
-            )
-            return c.lastrowid
-        else:
-            c.execute("SELECT title FROM items WHERE id=?", (item_id,))
-            it = c.fetchone()
-            t = it["title"] if it else "درخواست"
+        c.execute("SELECT title FROM items WHERE id=?", (item_id,))
+        it = c.fetchone()
+        item_title = it["title"] if it else "درخواست"
+        # get 'ثبت شده' status id if possible
+        statusid = None
+        if "statusid" in orders_cols:
             try:
-                c.execute(
-                    "INSERT INTO orders (user_id, title) VALUES (?, ?)",
-                    (user["id"], t),
-                )
-                return c.lastrowid
+                c.execute("SELECT id FROM orderstatus WHERE title='ثبت شده'")
+                st = c.fetchone()
+                statusid = st["id"] if st else None
             except sqlite3.OperationalError:
-                return None
+                statusid = None
+        cols = []
+        vals = []
+        if "itemid" in orders_cols:
+            cols.append("itemid"); vals.append(item_id)
+        if "userid" in orders_cols:
+            cols.append("userid"); vals.append(user["id"])
+        if "statusid" in orders_cols and statusid is not None:
+            cols.append("statusid"); vals.append(statusid)
+        if "user_id" in orders_cols:
+            cols.append("user_id"); vals.append(user["id"])
+        if "title" in orders_cols:
+            cols.append("title"); vals.append(item_title)
+        if "status" in orders_cols:
+            cols.append("status"); vals.append("ثبت شده")
+        if not cols:
+            return None
+        placeholders = ",".join(["?"] * len(vals))
+        c.execute(f"INSERT INTO orders ({','.join(cols)}) VALUES ({placeholders})", vals)
+        return c.lastrowid
 
 def set_content(key: str, value: str):
     with connect() as conn:
