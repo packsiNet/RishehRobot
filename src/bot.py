@@ -1,7 +1,12 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, ConversationHandler, ContextTypes, CallbackQueryHandler, filters
+try:
+    from zoneinfo import ZoneInfo
+    TEHRAN_TZ = ZoneInfo("Asia/Tehran")
+except Exception:
+    TEHRAN_TZ = None
 from .config import TELEGRAM_BOT_TOKEN, ADMIN_USER_IDS, APP_URL
 from .db import (
     init_db,
@@ -423,7 +428,14 @@ async def on_item_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ts = order.get("created_at") or ""
         j = to_jalali_str(ts)
         msg = f"سفارش #{order['id']}\nعنوان: {order['title']}\nوضعیت: {order['status']}\nتاریخ: {j}"
-        kb = InlineKeyboardMarkup([[InlineKeyboardButton("لغو سفارش", callback_data=f"ordercancel:{order['id']}")]])
+        can_cancel = False
+        sid = order.get("statusid")
+        if sid is not None:
+            can_cancel = sid in (1, 2)
+        else:
+            st = (order.get("status") or "").strip()
+            can_cancel = st in ("ثبت شده", "در دست بررسی")
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton("لغو سفارش", callback_data=f"ordercancel:{order['id']}")]]) if can_cancel else None
         await query.message.reply_text(msg, reply_markup=kb)
         return
     if data.startswith("ordercancel:"):
@@ -684,8 +696,13 @@ def g2j(y, m, d):
 def to_jalali_str(ts: str) -> str:
     try:
         dt = datetime.strptime(ts[:19], "%Y-%m-%d %H:%M:%S")
-        jy,jm,jd = g2j(dt.year, dt.month, dt.day)
-        return f"{jy:04d}/{jm:02d}/{jd:02d} {dt.strftime('%H:%M')}"
+        dt = dt.replace(tzinfo=timezone.utc)
+        if TEHRAN_TZ is not None:
+            ldt = dt.astimezone(TEHRAN_TZ)
+        else:
+            ldt = dt + timedelta(hours=3, minutes=30)
+        jy,jm,jd = g2j(ldt.year, ldt.month, ldt.day)
+        return f"{jy:04d}/{jm:02d}/{jd:02d} {ldt.strftime('%H:%M')}"
     except Exception:
         return ts
 

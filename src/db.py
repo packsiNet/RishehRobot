@@ -987,7 +987,7 @@ def get_order_by_id(order_id: int):
         try:
             c.execute(
                 """
-                SELECT o.id, i.title AS title, s.title AS status, o.created_at
+                SELECT o.id, i.title AS title, s.title AS status, o.statusid AS statusid, o.created_at
                 FROM orders o
                 JOIN items i ON i.id = o.itemid
                 JOIN orderstatus s ON s.id = o.statusid
@@ -1010,7 +1010,11 @@ def get_order_by_id(order_id: int):
                 (order_id,),
             )
             row = c.fetchone()
-            return dict(row) if row else None
+            if row:
+                d = dict(row)
+                d["statusid"] = None
+                return d
+            return None
         except sqlite3.OperationalError:
             return None
 
@@ -1027,7 +1031,7 @@ def cancel_order_by_id(order_id: int, telegram_id: int) -> bool:
                     UPDATE orders SET statusid=?
                     WHERE id IN (
                         SELECT o.id FROM orders o JOIN users u ON u.id=o.userid WHERE o.id=? AND u.telegramid=?
-                    )
+                    ) AND (statusid IN (1,2) OR statusid IS NULL)
                     """,
                     (statusid, order_id, telegram_id),
                 )
@@ -1041,7 +1045,7 @@ def cancel_order_by_id(order_id: int, telegram_id: int) -> bool:
                 UPDATE orders SET status='لغو شده'
                 WHERE id IN (
                     SELECT o.id FROM orders o JOIN users u ON u.id=o.user_id WHERE o.id=? AND u.telegramid=?
-                )
+                ) AND (status IN ('ثبت شده','در دست بررسی'))
                 """,
                 (order_id, telegram_id),
             )
