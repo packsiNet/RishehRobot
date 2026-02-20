@@ -1253,7 +1253,7 @@ def get_all_statuses():
     with connect() as conn:
         c = conn.cursor()
         try:
-            c.execute("SELECT id, title FROM orderstatus ORDER BY id ASC")
+            c.execute("SELECT id, title FROM orderstatus WHERE basestatus=1 ORDER BY id ASC")
             return [dict(r) for r in c.fetchall()]
         except sqlite3.OperationalError:
             pass
