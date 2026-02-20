@@ -86,6 +86,18 @@ def init_db():
         )
         c.execute(
             """
+            CREATE TABLE IF NOT EXISTS categories (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT UNIQUE NOT NULL,
+                description TEXT,
+                position INTEGER DEFAULT 0,
+                active INTEGER DEFAULT 1,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        c.execute(
+            """
             INSERT INTO content (key, value)
             SELECT 'about', 'ریشه؛ همراه رشد کسب‌وکار شماست.'
             WHERE NOT EXISTS (SELECT 1 FROM content WHERE key='about')
@@ -98,6 +110,18 @@ def init_db():
             WHERE NOT EXISTS (SELECT 1 FROM content WHERE key='trust')
             """
         )
+
+        defaults = [
+            ("🚨 تماس اضطراری 🚨", "توضیحات تماس اضطراری", 1),
+            ("👇 سلامت پیشگیرانه👇", "توضیحات سلامت پیشگیرانه", 2),
+            ("👇 ساخت لحظه‌های به‌یاد ماندنی از راه‌دور 👇", "توضیحات لحظه‌های به‌یاد ماندنی", 3),
+            ("👇 انجام نیازهای روزمره👇", "توضیحات نیازهای روزمره", 4),
+        ]
+        for t, d, p in defaults:
+            c.execute(
+                "INSERT INTO categories (title, description, position) SELECT ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM categories WHERE title=?)",
+                (t, d, p, t),
+            )
 
 def get_or_create_user(telegram_id: int, username: str | None, first_name: str | None, last_name: str | None):
     with connect() as conn:
@@ -196,3 +220,18 @@ def create_ticket(telegram_id: int, question: str):
             (user["id"], question),
         )
         return c.lastrowid
+
+def get_categories_active():
+    with connect() as conn:
+        c = conn.cursor()
+        c.execute(
+            "SELECT id, title, description FROM categories WHERE active=1 ORDER BY position ASC, id ASC"
+        )
+        return [dict(r) for r in c.fetchall()]
+
+def get_category_by_title(title: str):
+    with connect() as conn:
+        c = conn.cursor()
+        c.execute("SELECT id, title, description FROM categories WHERE title=? AND active=1", (title,))
+        row = c.fetchone()
+        return dict(row) if row else None

@@ -2,7 +2,7 @@ import logging
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, ConversationHandler, ContextTypes, filters
 from .config import TELEGRAM_BOT_TOKEN, ADMIN_USER_IDS, APP_URL
-from .db import init_db, get_or_create_user, get_orders_for_user, set_content, get_content, create_ticket, add_order_for_user, update_user_contact
+from .db import init_db, get_or_create_user, get_orders_for_user, set_content, get_content, create_ticket, add_order_for_user, update_user_contact, get_categories_active, get_category_by_title
 
 STATE_ASK_QUESTION = 1
 
@@ -36,7 +36,19 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     if text == "🚀 شروع همراهی 🚀":
         get_or_create_user(user.id, user.username, user.first_name, user.last_name)
-        await update.message.reply_text("همراهی‌مون شروع شده؛ از دکمه‌ها استفاده کن.", reply_markup=KB)
+        cats = get_categories_active()
+        msg = (
+            "🌿 همراهی از اینجا شروع میشه!\n"
+            "همراهی می‌تونه از توجه به سلامتی 🩺، رسیدگی به امور روزمره 🛍️\n"
+            "یا حتی یک سوپرایز که حال دل رو بهتر می‌کنه 🎁 شروع بشه.\n"
+            "بهمون بگو ریشه چیکار می‌تونه برات انجام بده؟ 🤍\n"
+            "برای اطلاعات بیشتر از هر سرویس، می‌تونی روی هرکدوم کلیک کنی تا توضیحات کامل برات ارسال بشه ✨"
+        )
+        if cats:
+            kb = ReplyKeyboardMarkup([[c["title"]] for c in cats], resize_keyboard=True, is_persistent=True)
+            await update.message.reply_text(msg, reply_markup=kb)
+        else:
+            await update.message.reply_text(msg, reply_markup=KB)
         return ConversationHandler.END
     if text == "📌 پیگیری سفارشاتم 📌":
         orders = get_orders_for_user(user.id)
@@ -59,6 +71,13 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         msg = value if value else "محتوای معرفی هنوز تنظیم نشده. از ادمین بخواهید /setcontent about ... را اجرا کند."
         await update.message.reply_text(msg, reply_markup=KB)
         return ConversationHandler.END
+    cats = get_categories_active()
+    if any(c["title"] == text for c in cats):
+        cat = get_category_by_title(text)
+        if cat and cat.get("description"):
+            kb = ReplyKeyboardMarkup([[c["title"]] for c in cats], resize_keyboard=True, is_persistent=True)
+            await update.message.reply_text(cat["description"], reply_markup=kb)
+            return ConversationHandler.END
     await update.message.reply_text("از منو انتخاب کن.", reply_markup=KB)
     return ConversationHandler.END
 
