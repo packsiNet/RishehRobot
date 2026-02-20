@@ -144,7 +144,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info("/start handled for user_id=%s", user.id)
 
 async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text
+    text = (update.message.text or "").strip()
     user = update.effective_user
     if is_admin(user.id):
         if text == "📦 لیست سفارشات":
@@ -275,9 +275,10 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(msg, reply_markup=(KB_ADMIN if is_admin(user.id) else KB_USER))
         return ConversationHandler.END
     cats = get_categories_active()
-    if any(c["title"] == text for c in cats):
-        cat = get_category_by_title(text)
-        items = get_items_by_category_title(text)
+    if any(((c.get("title") or "").strip()) == text for c in cats):
+        selected = next((c for c in cats if ((c.get("title") or "").strip()) == text), None)
+        cat = selected or get_category_by_title(text)
+        items = get_items_by_category(selected["id"]) if selected else get_items_by_category_title(text)
         if is_admin(user.id):
             if items:
                 ids = [i["id"] for i in items]
