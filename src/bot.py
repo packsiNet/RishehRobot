@@ -36,7 +36,7 @@ MAIN_BUTTONS = [
     ["📌 پیگیری سفارشاتم 📌"],
     ["🔎 چطور به ریشه اعتماد کنم؟ 🔎"],
     ["💬 اگه نمی‌دونی؛ از من بپرس! 💬"],
-    ["🌿 ریشه چیه؟ 🌿"],
+    ["🎥 آموزش تصویری"],
 ]
 ADMIN_MAIN_BUTTONS = [
     ["📦 لیست سفارشات"],
@@ -190,7 +190,7 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         await update.message.reply_text(support_msg, reply_markup=inline_kb)
         return ConversationHandler.END
-    if text == "🌿 ریشه چیه؟ 🌿":
+    if text == "🎥 آموزش تصویری":
         value = get_content("about")
         msg = value if value else "محتوای معرفی هنوز تنظیم نشده. از ادمین بخواهید /setcontent about ... را اجرا کند."
         await update.message.reply_text(msg, reply_markup=(KB_ADMIN if is_admin(user.id) else KB_USER))
