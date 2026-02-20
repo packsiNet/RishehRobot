@@ -84,6 +84,45 @@ def init_db():
             )
             """
         )
+        # Order status reference table
+        c.execute(
+            """
+            CREATE TABLE IF NOT EXISTS orderstatus (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT UNIQUE NOT NULL
+            )
+            """
+        )
+        # Seed statuses
+        for title in [
+            'ثبت شده',
+            'در دست بررسی',
+            'تایید شده برای انجام',
+            'در حال انجام',
+            'انجام شده',
+            'رد شده',
+        ]:
+            c.execute(
+                "INSERT INTO orderstatus (title) SELECT ? WHERE NOT EXISTS (SELECT 1 FROM orderstatus WHERE title=?)",
+                (title, title),
+            )
+        # New orders table based on requirements
+        c.execute(
+            """
+            CREATE TABLE IF NOT EXISTS orders (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                itemid INTEGER NOT NULL,
+                userid INTEGER NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                statusid INTEGER NOT NULL,
+                FOREIGN KEY(itemid) REFERENCES items(id),
+                FOREIGN KEY(userid) REFERENCES users(id),
+                FOREIGN KEY(statusid) REFERENCES orderstatus(id)
+            )
+            """
+        )
+        c.execute("CREATE INDEX IF NOT EXISTS idx_orders_userid ON orders(userid)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_orders_statusid ON orders(statusid)")
         c.execute(
             """
             CREATE TABLE IF NOT EXISTS categories (
@@ -320,17 +359,60 @@ def add_order_for_user(telegram_id: int, title: str):
 def get_orders_for_user(telegram_id: int):
     with connect() as conn:
         c = conn.cursor()
+        # Prefer new schema
+        try:
+            c.execute(
+                """
+                SELECT o.id, i.title AS title, s.title AS status, o.created_at
+                FROM orders o
+                JOIN users u ON u.id = o.userid
+                JOIN items i ON i.id = o.itemid
+                JOIN orderstatus s ON s.id = o.statusid
+                WHERE (u.telegramid = ? OR u.telegram_id = ?)
+                ORDER BY o.created_at DESC
+                """,
+                (telegram_id, telegram_id),
+            )
+            rows = c.fetchall()
+            if rows:
+                return [dict(r) for r in rows]
+        except sqlite3.OperationalError:
+            pass
+        # Fallback to legacy schema if exists
+        try:
+            c.execute(
+                """
+                SELECT o.id, o.title AS title, o.status AS status, o.created_at
+                FROM orders o
+                JOIN users u ON u.id = o.user_id
+                WHERE (u.telegramid = ? OR u.telegram_id = ?)
+                ORDER BY o.created_at DESC
+                """,
+                (telegram_id, telegram_id),
+            )
+            return [dict(r) for r in c.fetchall()]
+        except sqlite3.OperationalError:
+            return []
+
+def create_order_for_item(telegram_id: int, item_id: int):
+    with connect() as conn:
+        c = conn.cursor()
+        # resolve user id
+        try:
+            c.execute("SELECT id FROM users WHERE telegramid=?", (telegram_id,))
+        except sqlite3.OperationalError:
+            c.execute("SELECT id FROM users WHERE telegram_id=?", (telegram_id,))
+        user = c.fetchone()
+        if not user:
+            return None
+        c.execute("SELECT id FROM orderstatus WHERE title='ثبت شده'")
+        st = c.fetchone()
+        statusid = st["id"] if st else 1
         c.execute(
-            """
-            SELECT o.id, o.title, o.status, o.created_at
-            FROM orders o
-            JOIN users u ON u.id = o.user_id
-            WHERE (u.telegramid = ? OR u.telegram_id = ?)
-            ORDER BY o.created_at DESC
-            """,
-            (telegram_id, telegram_id),
+            "INSERT INTO orders (itemid, userid, statusid) VALUES (?, ?, ?)",
+            (item_id, user["id"], statusid),
         )
-        return [dict(r) for r in c.fetchall()]
+        return c.lastrowid
 
 def set_content(key: str, value: str):
     with connect() as conn:
@@ -348,17 +430,38 @@ def get_content(key: str) -> str | None:
         return row["value"] if row else None
 
 def create_ticket(telegram_id: int, question: str):
+    # If an item with this title exists, create an order in the new schema; otherwise, fallback is not performed
     with connect() as conn:
         c = conn.cursor()
-        c.execute("SELECT id FROM users WHERE telegram_id=?", (telegram_id,))
+        try:
+            c.execute("SELECT id FROM users WHERE telegramid=?", (telegram_id,))
+        except sqlite3.OperationalError:
+            c.execute("SELECT id FROM users WHERE telegram_id=?", (telegram_id,))
         user = c.fetchone()
         if not user:
             return None
-        c.execute(
-            "INSERT INTO tickets (user_id, question) VALUES (?, ?)",
-            (user["id"], question),
-        )
-        return c.lastrowid
+        # Try to find item by title
+        c.execute("SELECT id FROM items WHERE title=? AND active=1", (title,))
+        item = c.fetchone()
+        if item:
+            # Get status id for 'ثبت شده'
+            c.execute("SELECT id FROM orderstatus WHERE title='ثبت شده'")
+            st = c.fetchone()
+            statusid = st["id"] if st else 1
+            c.execute(
+                "INSERT INTO orders (itemid, userid, statusid) VALUES (?, ?, ?)",
+                (item["id"], user["id"], statusid),
+            )
+            return c.lastrowid
+        # Legacy fallback: if no item found, insert into old orders table if exists
+        try:
+            c.execute(
+                "INSERT INTO orders (user_id, title) VALUES (?, ?)",
+                (user["id"], title),
+            )
+            return c.lastrowid
+        except sqlite3.OperationalError:
+            return None
 
 def get_categories_active():
     with connect() as conn:

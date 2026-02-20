@@ -16,6 +16,7 @@ from .db import (
     get_items_by_category,
     get_item_by_title,
     get_item_by_id,
+    create_order_for_item,
 )
 
 STATE_ASK_QUESTION = 1
@@ -221,7 +222,7 @@ async def on_item_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not item:
             return
         user = update.effective_user
-        add_order_for_user(user.id, item["title"])
+        create_order_for_item(user.id, item_id)
         kb = InlineKeyboardMarkup(
             [[InlineKeyboardButton("⬅️ بازگشت", callback_data=f"back:cat:{item['categoryid']}")]]
         )
