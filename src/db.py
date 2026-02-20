@@ -107,10 +107,19 @@ def init_db():
             """
             CREATE TABLE IF NOT EXISTS orderstatus (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                title TEXT UNIQUE NOT NULL
+                title TEXT UNIQUE NOT NULL,
+                basestatus INTEGER NOT NULL DEFAULT 1
             )
             """
         )
+        # Backward compatibility: add basestatus if missing
+        try:
+            os_cols = _table_columns(conn, "orderstatus")
+            if "basestatus" not in os_cols:
+                c.execute("ALTER TABLE orderstatus ADD COLUMN basestatus INTEGER NOT NULL DEFAULT 1")
+                c.execute("UPDATE orderstatus SET basestatus=1 WHERE basestatus IS NULL")
+        except Exception:
+            pass
         # Seed statuses
         for title in [
             'ثبت شده',
@@ -121,10 +130,17 @@ def init_db():
             'رد شده',
             'لغو شده'
         ]:
+            base = 1 if title in ('ثبت شده','لغو شده') else 0
             c.execute(
-                "INSERT INTO orderstatus (title) SELECT ? WHERE NOT EXISTS (SELECT 1 FROM orderstatus WHERE title=?)",
-                (title, title),
+                "INSERT INTO orderstatus (title, basestatus) SELECT ?, ? WHERE NOT EXISTS (SELECT 1 FROM orderstatus WHERE title=?)",
+                (title, base, title),
             )
+        # Normalize existing rows to match new basestatus rule
+        try:
+            c.execute("UPDATE orderstatus SET basestatus=1 WHERE title IN ('ثبت شده','لغو شده')")
+            c.execute("UPDATE orderstatus SET basestatus=0 WHERE title NOT IN ('ثبت شده','لغو شده')")
+        except Exception:
+            pass
         # New orders table based on requirements (idempotent)
         c.execute(
             """
