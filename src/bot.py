@@ -37,6 +37,7 @@ from .db import (
     get_user_by_id,
     set_user_role,
     set_user_active,
+    get_admin_telegram_ids,
 )
 
 STATE_ASK_QUESTION = 1
@@ -316,6 +317,21 @@ async def addorder(update: Update, context: ContextTypes.DEFAULT_TYPE):
     oid = add_order_for_user(user.id, title)
     if oid:
         await update.message.reply_text(f"سفارش #{oid} ثبت شد.", reply_markup=(KB_ADMIN if is_admin(user.id) else KB_USER))
+        try:
+            j = ""
+            order = get_order_by_id(oid)
+            if order and order.get("created_at"):
+                j = to_jalali_str(order["created_at"])
+            name = (user.first_name or "").strip() or (f"@{user.username}" if user.username else "کاربر")
+            admins = set(get_admin_telegram_ids() + ADMIN_USER_IDS)
+            msg = f"سفارش جدید\nکاربر: {name}\nعنوان: {title}\nتاریخ: {j}"
+            for aid in admins:
+                try:
+                    await context.bot.send_message(chat_id=aid, text=msg)
+                except Exception:
+                    pass
+        except Exception:
+            pass
     else:
         await update.message.reply_text("عنوان آیتم نامعتبر است یا ابتدا /start را بزن.")
     logger.info("addorder user_id=%s title=%s", user.id, title)
@@ -462,6 +478,15 @@ async def on_item_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ok = update_order_status_id(oid, sid if sid != 0 else None)
         if ok:
             await query.message.reply_text("وضعیت سفارش با موفقیت تغییر کرد ✅")
+            try:
+                info = get_order_detail_admin(oid)
+                if info and info.get("telegramid"):
+                    info2 = get_order_detail_admin(oid)
+                    st_title = info2.get("status") if info2 else None
+                    it_title = info2.get("item_title") if info2 else ""
+                    await context.bot.send_message(chat_id=info["telegramid"], text=f"وضعیت سفارش «{it_title}» به «{st_title or ''}» تغییر کرد")
+            except Exception:
+                pass
         else:
             await query.message.reply_text("تغییر وضعیت انجام نشد.")
         return
@@ -560,12 +585,26 @@ async def on_item_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not item:
             return
         user = update.effective_user
-        create_order_for_item(user.id, item_id)
+        oid = create_order_for_item(user.id, item_id)
         kb = InlineKeyboardMarkup(
             [[InlineKeyboardButton("⬅️ بازگشت", callback_data=f"back:cat:{item['categoryid']}")]]
         )
         await query.message.edit_text("سفارش ثبت شد ✅")
         await query.message.edit_reply_markup(reply_markup=kb)
+        try:
+            order = get_order_by_id(oid) if oid else None
+            ts = order.get("created_at") if order else None
+            j = to_jalali_str(ts) if ts else ""
+            name = (user.first_name or "").strip() or (f"@{user.username}" if user.username else "کاربر")
+            admins = set(get_admin_telegram_ids() + ADMIN_USER_IDS)
+            msg = f"سفارش جدید\nکاربر: {name}\nعنوان: {item['title']}\nتاریخ: {j}"
+            for aid in admins:
+                try:
+                    await context.bot.send_message(chat_id=aid, text=msg)
+                except Exception:
+                    pass
+        except Exception:
+            pass
         return
     if data.startswith("back:cat:"):
         try:

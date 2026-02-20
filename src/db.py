@@ -1259,6 +1259,7 @@ def get_order_detail_admin(order_id: int):
             c.execute(
                 """
                 SELECT o.id, o.itemid, o.userid, u.username, u.firstname, u.lastname,
+                       u.telegramid,
                        i.title AS item_title, i.description AS item_description,
                        s.title AS status, o.created_at
                 FROM orders o
@@ -1278,7 +1279,7 @@ def get_order_detail_admin(order_id: int):
         try:
             c.execute(
                 """
-                SELECT o.id, NULL AS itemid, o.user_id AS userid, u.username, u.firstname, u.lastname,
+                SELECT o.id, NULL AS itemid, o.user_id AS userid, u.username, u.firstname, u.lastname, u.telegramid,
                        o.title AS item_title,
                        (SELECT i.description FROM items i WHERE i.title=o.title LIMIT 1) AS item_description,
                        o.status AS status, o.created_at
@@ -1340,6 +1341,25 @@ def update_order_status_id(order_id: int, status_id: int | None, status_title: s
             return c.rowcount > 0
         except sqlite3.OperationalError:
             return False
+
+def get_admin_telegram_ids():
+    with connect() as conn:
+        c = conn.cursor()
+        try:
+            c.execute("SELECT telegramid FROM users WHERE roleid=1 AND active=1 AND telegramid IS NOT NULL")
+            return [r["telegramid"] for r in c.fetchall()]
+        except Exception:
+            return []
+
+def get_status_title_by_id(status_id: int) -> str | None:
+    with connect() as conn:
+        c = conn.cursor()
+        try:
+            c.execute("SELECT title FROM orderstatus WHERE id=?", (status_id,))
+            r = c.fetchone()
+            return r["title"] if r else None
+        except Exception:
+            return None
 
 def add_item(category_id: int, title: str, description: str | None = None, active: int = 1):
     with connect() as conn:
