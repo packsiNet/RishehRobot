@@ -387,17 +387,14 @@ def get_or_create_user(telegram_id: int, username: str | None, first_name: str |
         c.execute("SELECT * FROM users WHERE telegramid=?", (telegram_id,))
         row = c.fetchone()
         if row:
-            roleid = 1 if telegram_id in ADMIN_USER_IDS else 2
+            # فقط اطلاعات نمایشی کاربر به‌روزرسانی می‌شود؛ نقش هرگز در این مسیر تغییر نمی‌کند
             try:
-                c.execute(
-                    "UPDATE users SET username=?, firstname=?, lastname=?, roleid=? WHERE telegramid=?",
-                    (username, first_name, last_name, roleid, telegram_id),
-                )
-            except Exception:
                 c.execute(
                     "UPDATE users SET username=?, firstname=?, lastname=? WHERE telegramid=?",
                     (username, first_name, last_name, telegram_id),
                 )
+            except Exception:
+                pass
             c.execute("SELECT * FROM users WHERE telegramid=?", (telegram_id,))
             return c.fetchone()
         # Fallback to old schema search
