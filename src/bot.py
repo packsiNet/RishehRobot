@@ -2,7 +2,20 @@ import logging
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, ConversationHandler, ContextTypes, filters
 from .config import TELEGRAM_BOT_TOKEN, ADMIN_USER_IDS, APP_URL
-from .db import init_db, get_or_create_user, get_orders_for_user, set_content, get_content, create_ticket, add_order_for_user, update_user_contact, get_categories_active, get_category_by_title
+from .db import (
+    init_db,
+    get_or_create_user,
+    get_orders_for_user,
+    set_content,
+    get_content,
+    create_ticket,
+    add_order_for_user,
+    update_user_contact,
+    get_categories_active,
+    get_category_by_title,
+    get_items_by_category_title,
+    get_item_by_title,
+)
 
 STATE_ASK_QUESTION = 1
 
@@ -74,10 +87,22 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     cats = get_categories_active()
     if any(c["title"] == text for c in cats):
         cat = get_category_by_title(text)
+        items = get_items_by_category_title(text)
+        if items:
+            kb = ReplyKeyboardMarkup([[i["title"]] for i in items], resize_keyboard=True, is_persistent=True)
+            msg = cat["description"] if (cat and cat.get("description")) else "لطفاً یک مورد را انتخاب کن."
+            await update.message.reply_text(msg, reply_markup=kb)
+            return ConversationHandler.END
         if cat and cat.get("description"):
             kb = ReplyKeyboardMarkup([[c["title"]] for c in cats], resize_keyboard=True, is_persistent=True)
             await update.message.reply_text(cat["description"], reply_markup=kb)
             return ConversationHandler.END
+    item = get_item_by_title(text)
+    if item:
+        same_items = get_items_by_category_title(item["category_title"]) or []
+        kb = ReplyKeyboardMarkup([[i["title"]] for i in same_items], resize_keyboard=True, is_persistent=True)
+        await update.message.reply_text(item.get("description") or "", reply_markup=kb)
+        return ConversationHandler.END
     await update.message.reply_text("از منو انتخاب کن.", reply_markup=KB)
     return ConversationHandler.END
 
