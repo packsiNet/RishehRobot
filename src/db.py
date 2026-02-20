@@ -448,6 +448,110 @@ def get_orders_for_user(telegram_id: int):
         except sqlite3.OperationalError:
             return []
 
+def get_order_stats_for_user(telegram_id: int):
+    with connect() as conn:
+        c = conn.cursor()
+        try:
+            c.execute(
+                """
+                SELECT COUNT(1) AS cnt
+                FROM orders o JOIN users u ON u.id=o.userid
+                WHERE (u.telegramid=? OR u.telegram_id=?)
+                """,
+                (telegram_id, telegram_id),
+            )
+            total = c.fetchone()[0]
+            c.execute(
+                """
+                SELECT COUNT(1) AS cnt
+                FROM orders o
+                JOIN users u ON u.id=o.userid
+                JOIN orderstatus s ON s.id=o.statusid
+                WHERE (u.telegramid=? OR u.telegram_id=?) AND s.title='در حال انجام'
+                """,
+                (telegram_id, telegram_id),
+            )
+            doing = c.fetchone()[0]
+            c.execute(
+                """
+                SELECT COUNT(1) AS cnt
+                FROM orders o
+                JOIN users u ON u.id=o.userid
+                JOIN orderstatus s ON s.id=o.statusid
+                WHERE (u.telegramid=? OR u.telegram_id=?) AND s.title='انجام شده'
+                """,
+                (telegram_id, telegram_id),
+            )
+            done = c.fetchone()[0]
+            return {"total": total, "doing": doing, "done": done}
+        except sqlite3.OperationalError:
+            pass
+        try:
+            c.execute(
+                """
+                SELECT COUNT(1) FROM orders o
+                JOIN users u ON u.id=o.user_id
+                WHERE (u.telegramid=? OR u.telegram_id=?)
+                """,
+                (telegram_id, telegram_id),
+            )
+            total = c.fetchone()[0]
+            c.execute(
+                """
+                SELECT COUNT(1) FROM orders o
+                JOIN users u ON u.id=o.user_id
+                WHERE (u.telegramid=? OR u.telegram_id=?) AND o.status='در حال انجام'
+                """,
+                (telegram_id, telegram_id),
+            )
+            doing = c.fetchone()[0]
+            c.execute(
+                """
+                SELECT COUNT(1) FROM orders o
+                JOIN users u ON u.id=o.user_id
+                WHERE (u.telegramid=? OR u.telegram_id=?) AND o.status='انجام شده'
+                """,
+                (telegram_id, telegram_id),
+            )
+            done = c.fetchone()[0]
+            return {"total": total, "doing": doing, "done": done}
+        except sqlite3.OperationalError:
+            return {"total": 0, "doing": 0, "done": 0}
+
+def get_orders_for_user_by_status(telegram_id: int, status_title: str):
+    with connect() as conn:
+        c = conn.cursor()
+        try:
+            c.execute(
+                """
+                SELECT o.id, i.title AS title, s.title AS status, o.created_at
+                FROM orders o
+                JOIN users u ON u.id = o.userid
+                JOIN items i ON i.id = o.itemid
+                JOIN orderstatus s ON s.id = o.statusid
+                WHERE (u.telegramid = ? OR u.telegram_id = ?) AND s.title = ?
+                ORDER BY o.created_at DESC
+                """,
+                (telegram_id, telegram_id, status_title),
+            )
+            return [dict(r) for r in c.fetchall()]
+        except sqlite3.OperationalError:
+            pass
+        try:
+            c.execute(
+                """
+                SELECT o.id, o.title AS title, o.status AS status, o.created_at
+                FROM orders o
+                JOIN users u ON u.id = o.user_id
+                WHERE (u.telegramid = ? OR u.telegram_id = ?) AND o.status = ?
+                ORDER BY o.created_at DESC
+                """,
+                (telegram_id, telegram_id, status_title),
+            )
+            return [dict(r) for r in c.fetchall()]
+        except sqlite3.OperationalError:
+            return []
+
 def create_order_for_item(telegram_id: int, item_id: int):
     with connect() as conn:
         c = conn.cursor()

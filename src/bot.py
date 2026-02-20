@@ -6,6 +6,8 @@ from .db import (
     init_db,
     get_or_create_user,
     get_orders_for_user,
+    get_orders_for_user_by_status,
+    get_order_stats_for_user,
     set_content,
     get_content,
     create_ticket,
@@ -31,6 +33,16 @@ MAIN_BUTTONS = [
 
 KB = ReplyKeyboardMarkup(MAIN_BUTTONS, resize_keyboard=True, is_persistent=True)
 BACK_TEXT = "⬅️ بازگشت"
+ORDER_MENU = ReplyKeyboardMarkup(
+    [
+        ["📊 اعلام وضعیت سفارش‌ها"],
+        ["⏳ سفارش‌های درحال انجام"],
+        ["✅ سفارش‌های تکمیل شده"],
+        [BACK_TEXT],
+    ],
+    resize_keyboard=True,
+    is_persistent=True,
+)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s | %(message)s")
 logger = logging.getLogger("rishehbot")
@@ -75,12 +87,37 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(msg, reply_markup=KB)
         return ConversationHandler.END
     if text == "📌 پیگیری سفارشاتم 📌":
-        orders = get_orders_for_user(user.id)
-        if not orders:
-            await update.message.reply_text("هنوز سفارشی ثبت نشده.", reply_markup=KB)
-        else:
-            lines = [f"#{o['id']} • {o['title']} • {o['status']}" for o in orders]
-            await update.message.reply_text("\n".join(lines), reply_markup=KB)
+        msg = (
+            "🔄 همراهی همیشه برقراره!\n"
+            "اگه قبلاً از ریشه خدمتی گرفتی یا سفارشی ثبت کردی،\n"
+            "اینجا می‌تونی وضعیتش رو ببینی 👀"
+        )
+        await update.message.reply_text(msg, reply_markup=ORDER_MENU)
+        return ConversationHandler.END
+    if text == "📊 اعلام وضعیت سفارش‌ها":
+        stats = get_order_stats_for_user(user.id)
+        msg = (
+            f"تعداد کل سفارشات: {stats['total']}\n"
+            f"تعداد سفارشات در حال انجام: {stats['doing']}\n"
+            f"تعداد سفارشات تکمیل شده: {stats['done']}"
+        )
+        await update.message.reply_text(msg, reply_markup=ORDER_MENU)
+        return ConversationHandler.END
+    if text == "⏳ سفارش‌های درحال انجام":
+        lst = get_orders_for_user_by_status(user.id, "در حال انجام")
+        if not lst:
+            await update.message.reply_text("سفارشی در حال انجام نیست.", reply_markup=ORDER_MENU)
+            return ConversationHandler.END
+        lines = [f"#{o['id']} • {o['title']}" for o in lst]
+        await update.message.reply_text("\n".join(lines), reply_markup=ORDER_MENU)
+        return ConversationHandler.END
+    if text == "✅ سفارش‌های تکمیل شده":
+        lst = get_orders_for_user_by_status(user.id, "انجام شده")
+        if not lst:
+            await update.message.reply_text("سفارشی تکمیل‌شده ثبت نشده.", reply_markup=ORDER_MENU)
+            return ConversationHandler.END
+        lines = [f"#{o['id']} • {o['title']}" for o in lst]
+        await update.message.reply_text("\n".join(lines), reply_markup=ORDER_MENU)
         return ConversationHandler.END
     if text == "🔎 چطور به ریشه اعتماد کنم؟ 🔎":
         value = get_content("trust")
@@ -99,7 +136,7 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "@rishehsupport"
         )
         inline_kb = InlineKeyboardMarkup(
-            [[InlineKeyboardButton("دکمه ارتباط با پشتیباهی", url="https://t.me/rishehsupport")]]
+            [[InlineKeyboardButton(" ارتباط با پشتیبانی", url="https://t.me/rishehsupport")]]
         )
         await update.message.reply_text(support_msg, reply_markup=inline_kb)
         return ConversationHandler.END
