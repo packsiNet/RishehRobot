@@ -88,7 +88,12 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     if is_admin(user.id):
         if text == "📦 لیست سفارشات":
-            await update.message.reply_text("لیست سفارشات (ادمین) - به‌زودی.", reply_markup=KB_ADMIN)
+            cats = get_categories_active()
+            if cats:
+                kb = ReplyKeyboardMarkup([[c["title"]] for c in cats] + [[BACK_TEXT]], resize_keyboard=True, is_persistent=True)
+                await update.message.reply_text("یک دسته‌بندی را انتخاب کن:", reply_markup=kb)
+            else:
+                await update.message.reply_text("دسته‌بندی فعالی موجود نیست.", reply_markup=KB_ADMIN)
             return ConversationHandler.END
         if text == "🧰 مدیریت خدمات":
             await update.message.reply_text("مدیریت خدمات - به‌زودی.", reply_markup=KB_ADMIN)
