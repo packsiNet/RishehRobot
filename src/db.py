@@ -63,6 +63,11 @@ def init_db():
             pass
         # Unique index on username (NULLs allowed, SQLite permits multiple NULLs)
         c.execute("CREATE UNIQUE INDEX IF NOT EXISTS ux_users_username ON users(username)")
+        try:
+            for aid in ADMIN_USER_IDS:
+                c.execute("UPDATE users SET roleid=1 WHERE telegramid=?", (aid,))
+        except Exception:
+            pass
         c.execute(
             """
             CREATE TABLE IF NOT EXISTS orders (
