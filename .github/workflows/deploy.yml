@@ -84,7 +84,7 @@ jobs:
 
       - name: Create artifact
         run: |
-          git archive --format=tar --prefix=rishehbot/ HEAD | gzip > rishehbot.tar.gz
+          git archive --format=tar --prefix=rishehrobot/ HEAD | gzip > rishehrobot.tar.gz
 
       - name: Add SSH key
         uses: webfactory/ssh-agent@v0.9.0
@@ -94,8 +94,8 @@ jobs:
       - name: Upload artifact to server
         run: |
           scp -o StrictHostKeyChecking=no -P "${RESOLVED_PORT}" \
-          rishehbot.tar.gz \
-          "${RESOLVED_USER}@${RESOLVED_HOST}:/tmp/rishehbot.tar.gz"
+          rishehrobot.tar.gz \
+          "${RESOLVED_USER}@${RESOLVED_HOST}:/tmp/rishehrobot.tar.gz"
 
       - name: Deploy on server
         run: |
@@ -103,17 +103,17 @@ jobs:
           "${RESOLVED_USER}@${RESOLVED_HOST}" << EOF
           set -e
 
-          sudo mkdir -p /opt/rishehbot
-          sudo tar -xzf /tmp/rishehbot.tar.gz -C /opt/rishehbot --strip-components=1
+          sudo mkdir -p /opt/rishehrobot
+          sudo tar -xzf /tmp/rishehrobot.tar.gz -C /opt/rishehrobot --strip-components=1
 
-          sudo bash /opt/rishehbot/deploy/install_server.sh
+          sudo bash /opt/rishehrobot/deploy/install_server.sh
 
           BOT_TOKEN="${RESOLVED_BOT_TOKEN}"
           DB_URL="${RESOLVED_DB_URL}"
 
           # First-time deploy check
           if [ -z "\$BOT_TOKEN" ]; then
-            if [ -f /opt/rishehbot/.env ] && grep -q '^BOT_TOKEN=' /opt/rishehbot/.env; then
+            if [ -f /opt/rishehrobot/.env ] && grep -q '^BOT_TOKEN=' /opt/rishehrobot/.env; then
               echo "Existing .env found. Proceeding without new BOT_TOKEN."
               BOT_TOKEN=""
             else
@@ -122,10 +122,10 @@ jobs:
             fi
           fi
 
-          sudo bash /opt/rishehbot/deploy/deploy_bot.sh "\$BOT_TOKEN" "${RESOLVED_USER}" "\$DB_URL"
+          sudo bash /opt/rishehrobot/deploy/deploy_bot.sh "\$BOT_TOKEN" "${RESOLVED_USER}" "\$DB_URL"
 
-          sudo systemctl is-active --quiet rishehbot \
+          sudo systemctl is-active --quiet rishehrobot \
             && echo "Service active" \
-            || (sudo journalctl -u rishehbot -n 50 --no-pager; exit 1)
+            || (sudo journalctl -u rishehrobot -n 50 --no-pager; exit 1)
 
           EOF
