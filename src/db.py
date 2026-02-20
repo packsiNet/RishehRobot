@@ -106,7 +106,7 @@ def init_db():
                 "INSERT INTO orderstatus (title) SELECT ? WHERE NOT EXISTS (SELECT 1 FROM orderstatus WHERE title=?)",
                 (title, title),
             )
-        # New orders table based on requirements
+        # New orders table based on requirements (idempotent)
         c.execute(
             """
             CREATE TABLE IF NOT EXISTS orders (
@@ -121,8 +121,12 @@ def init_db():
             )
             """
         )
-        c.execute("CREATE INDEX IF NOT EXISTS idx_orders_userid ON orders(userid)")
-        c.execute("CREATE INDEX IF NOT EXISTS idx_orders_statusid ON orders(statusid)")
+        # Only create indexes if corresponding columns exist (handles legacy schema gracefully)
+        orders_cols = _table_columns(conn, "orders")
+        if "userid" in orders_cols:
+            c.execute("CREATE INDEX IF NOT EXISTS idx_orders_userid ON orders(userid)")
+        if "statusid" in orders_cols:
+            c.execute("CREATE INDEX IF NOT EXISTS idx_orders_statusid ON orders(statusid)")
         c.execute(
             """
             CREATE TABLE IF NOT EXISTS categories (
