@@ -1,6 +1,6 @@
 import logging
-from telegram import Update, ReplyKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, ConversationHandler, ContextTypes, filters
+from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton
+from telegram.ext import Application, CommandHandler, MessageHandler, ConversationHandler, ContextTypes, CallbackQueryHandler, filters
 from .config import TELEGRAM_BOT_TOKEN, ADMIN_USER_IDS, APP_URL
 from .db import (
     init_db,
@@ -13,7 +13,9 @@ from .db import (
     get_categories_active,
     get_category_by_title,
     get_items_by_category_title,
+    get_items_by_category,
     get_item_by_title,
+    get_item_by_id,
 )
 
 STATE_ASK_QUESTION = 1
@@ -86,9 +88,12 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         cat = get_category_by_title(text)
         items = get_items_by_category_title(text)
         if items:
-            kb = ReplyKeyboardMarkup([[i["title"]] for i in items] + [[BACK_TEXT]], resize_keyboard=True, is_persistent=True)
+            inline_kb = InlineKeyboardMarkup(
+                [[InlineKeyboardButton(i["title"], callback_data=f"item:{i['id']}")] for i in items] +
+                [[InlineKeyboardButton("⬅️ بازگشت", callback_data="back:cats")]]
+            )
             msg = cat["description"] if (cat and cat.get("description")) else "لطفاً یک مورد را انتخاب کن."
-            await update.message.reply_text(msg, reply_markup=kb)
+            await update.message.reply_text(msg, reply_markup=inline_kb)
             return ConversationHandler.END
         if cat and cat.get("description"):
             kb = ReplyKeyboardMarkup([[c["title"]] for c in cats] + [[BACK_TEXT]], resize_keyboard=True, is_persistent=True)
@@ -97,8 +102,11 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     item = get_item_by_title(text)
     if item:
         same_items = get_items_by_category_title(item["category_title"]) or []
-        kb = ReplyKeyboardMarkup([[i["title"]] for i in same_items] + [[BACK_TEXT]], resize_keyboard=True, is_persistent=True)
-        await update.message.reply_text(item.get("description") or "", reply_markup=kb)
+        inline_kb = InlineKeyboardMarkup(
+            [[InlineKeyboardButton(i["title"], callback_data=f"item:{i['id']}")] for i in same_items] +
+            [[InlineKeyboardButton("⬅️ بازگشت", callback_data="back:cats")]]
+        )
+        await update.message.reply_text(item.get("description") or "", reply_markup=inline_kb)
         return ConversationHandler.END
     await update.message.reply_text("از منو انتخاب کن.", reply_markup=KB)
     return ConversationHandler.END
@@ -172,6 +180,7 @@ def build_app():
     app.add_handler(CommandHandler("menu", menu))
     app.add_handler(CommandHandler("setcontent", setcontent))
     app.add_handler(CommandHandler("addorder", addorder))
+    app.add_handler(CallbackQueryHandler(on_item_callback, pattern=r"^(item:\d+|back:cats)$"))
     conv = ConversationHandler(
         entry_points=[MessageHandler(filters.TEXT & ~filters.COMMAND, handle_menu)],
         states={
@@ -183,6 +192,31 @@ def build_app():
     app.add_handler(conv)
     app.add_error_handler(error_handler)
     return app
+
+async def on_item_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+    if data == "back:cats":
+        cats = get_categories_active()
+        kb = ReplyKeyboardMarkup([[c["title"]] for c in cats] + [[BACK_TEXT]], resize_keyboard=True, is_persistent=True)
+        await query.message.reply_text("بازگشت به دسته‌ها.", reply_markup=kb)
+        return
+    if data.startswith("item:"):
+        try:
+            item_id = int(data.split(":", 1)[1])
+        except Exception:
+            return
+        item = get_item_by_id(item_id)
+        if not item:
+            await query.message.reply_text("مورد یافت نشد.")
+            return
+        same_items = get_items_by_category(item["categoryid"]) or []
+        inline_kb = InlineKeyboardMarkup(
+            [[InlineKeyboardButton(i["title"], callback_data=f"item:{i['id']}")] for i in same_items] +
+            [[InlineKeyboardButton("⬅️ بازگشت", callback_data="back:cats")]]
+        )
+        await query.message.reply_text(item.get("description") or "", reply_markup=inline_kb)
 
 def main():
     if not TELEGRAM_BOT_TOKEN:

@@ -390,6 +390,21 @@ def get_item_by_title(title: str):
         row = c.fetchone()
         return dict(row) if row else None
 
+def get_item_by_id(item_id: int):
+    with connect() as conn:
+        c = conn.cursor()
+        c.execute(
+            """
+            SELECT i.id, i.title, i.description, i.categoryid, c.title as category_title
+            FROM items i
+            JOIN categories c ON c.id = i.categoryid
+            WHERE i.id=? AND i.active=1 AND c.active=1
+            """,
+            (item_id,),
+        )
+        row = c.fetchone()
+        return dict(row) if row else None
+
 def add_item(category_id: int, title: str, description: str | None = None, active: int = 1):
     with connect() as conn:
         c = conn.cursor()
