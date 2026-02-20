@@ -1,5 +1,5 @@
 import logging
-from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
+from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, ConversationHandler, ContextTypes, filters
 from .config import TELEGRAM_BOT_TOKEN, ADMIN_USER_IDS, APP_URL
 from .db import (
@@ -10,7 +10,6 @@ from .db import (
     get_content,
     create_ticket,
     add_order_for_user,
-    update_user_contact,
     get_categories_active,
     get_category_by_title,
     get_items_by_category_title,
@@ -28,6 +27,7 @@ MAIN_BUTTONS = [
 ]
 
 KB = ReplyKeyboardMarkup(MAIN_BUTTONS, resize_keyboard=True, is_persistent=True)
+BACK_TEXT = "⬅️ بازگشت"
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s | %(message)s")
 logger = logging.getLogger("rishehbot")
@@ -36,17 +36,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     get_or_create_user(user.id, user.username, user.first_name, user.last_name)
     await update.message.reply_text("خوش اومدی! از منوی زیر انتخاب کن.", reply_markup=KB)
-    contact_kb = ReplyKeyboardMarkup(
-        [[KeyboardButton(text="📱 ارسال شماره تماس", request_contact=True)]],
-        resize_keyboard=True,
-        one_time_keyboard=True,
-    )
-    await update.message.reply_text("برای تکمیل پروفایل، شماره تماست رو ارسال کن.", reply_markup=contact_kb)
     logger.info("/start handled for user_id=%s", user.id)
 
 async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     user = update.effective_user
+    if text == BACK_TEXT:
+        await update.message.reply_text("بازگشت به منوی اصلی.", reply_markup=KB)
+        return ConversationHandler.END
     if text in ("🚀 شروع همراهی 🚀", "🚀 شروع همیاری 🚀"):
         get_or_create_user(user.id, user.username, user.first_name, user.last_name)
         cats = get_categories_active()
@@ -58,7 +55,7 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "برای اطلاعات بیشتر از هر سرویس، می‌تونی روی هرکدوم کلیک کنی تا توضیحات کامل برات ارسال بشه ✨"
         )
         if cats:
-            kb = ReplyKeyboardMarkup([[c["title"]] for c in cats], resize_keyboard=True, is_persistent=True)
+            kb = ReplyKeyboardMarkup([[c["title"]] for c in cats] + [[BACK_TEXT]], resize_keyboard=True, is_persistent=True)
             await update.message.reply_text(msg, reply_markup=kb)
         else:
             await update.message.reply_text(msg, reply_markup=KB)
@@ -89,18 +86,18 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         cat = get_category_by_title(text)
         items = get_items_by_category_title(text)
         if items:
-            kb = ReplyKeyboardMarkup([[i["title"]] for i in items], resize_keyboard=True, is_persistent=True)
+            kb = ReplyKeyboardMarkup([[i["title"]] for i in items] + [[BACK_TEXT]], resize_keyboard=True, is_persistent=True)
             msg = cat["description"] if (cat and cat.get("description")) else "لطفاً یک مورد را انتخاب کن."
             await update.message.reply_text(msg, reply_markup=kb)
             return ConversationHandler.END
         if cat and cat.get("description"):
-            kb = ReplyKeyboardMarkup([[c["title"]] for c in cats], resize_keyboard=True, is_persistent=True)
+            kb = ReplyKeyboardMarkup([[c["title"]] for c in cats] + [[BACK_TEXT]], resize_keyboard=True, is_persistent=True)
             await update.message.reply_text(cat["description"], reply_markup=kb)
             return ConversationHandler.END
     item = get_item_by_title(text)
     if item:
         same_items = get_items_by_category_title(item["category_title"]) or []
-        kb = ReplyKeyboardMarkup([[i["title"]] for i in same_items], resize_keyboard=True, is_persistent=True)
+        kb = ReplyKeyboardMarkup([[i["title"]] for i in same_items] + [[BACK_TEXT]], resize_keyboard=True, is_persistent=True)
         await update.message.reply_text(item.get("description") or "", reply_markup=kb)
         return ConversationHandler.END
     await update.message.reply_text("از منو انتخاب کن.", reply_markup=KB)
@@ -109,13 +106,6 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("منوی اصلی نمایش داده شد.", reply_markup=KB)
 
-async def receive_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.message and update.message.contact:
-        phone = update.message.contact.phone_number
-        uid = update.message.contact.user_id or update.effective_user.id
-        update_user_contact(uid, phone)
-        await update.message.reply_text("شماره تماس ذخیره شد. ممنون!", reply_markup=KB)
-    return ConversationHandler.END
 
 async def receive_question(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.message.text.strip()
@@ -191,7 +181,6 @@ def build_app():
         allow_reentry=True,
     )
     app.add_handler(conv)
-    app.add_handler(MessageHandler(filters.CONTACT, receive_contact))
     app.add_error_handler(error_handler)
     return app
 
