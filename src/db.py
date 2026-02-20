@@ -521,8 +521,12 @@ def get_order_stats_for_user(telegram_id: int):
                 (telegram_id, telegram_id),
             )
             done = c.fetchone()[0]
+            if total == 0 and doing == 0 and done == 0:
+                raise RuntimeError("fallback_legacy")
             return {"total": total, "doing": doing, "done": done}
         except sqlite3.OperationalError:
+            pass
+        except RuntimeError:
             pass
         try:
             c.execute(
@@ -534,20 +538,22 @@ def get_order_stats_for_user(telegram_id: int):
                 (telegram_id, telegram_id),
             )
             total = c.fetchone()[0]
+            placeholders = ",".join(["?"] * 4)
+            params = [telegram_id, telegram_id, 'ثبت شده', 'در دست بررسی', 'در حال بررسی', 'تایید شده برای انجام']
             c.execute(
-                """
+                f"""
                 SELECT COUNT(1) FROM orders o
                 JOIN users u ON u.id=o.user_id
-                WHERE (u.telegramid=? OR u.telegram_id=?) AND o.status='در حال انجام'
+                WHERE (u.telegramid=? OR u.telegram_id=?) AND o.status IN ({placeholders})
                 """,
-                (telegram_id, telegram_id),
+                params,
             )
             doing = c.fetchone()[0]
             c.execute(
                 """
                 SELECT COUNT(1) FROM orders o
                 JOIN users u ON u.id=o.user_id
-                WHERE (u.telegramid=? OR u.telegram_id=?) AND o.status='انجام شده'
+                WHERE (u.telegramid=? OR u.telegram_id=?) AND o.status IN ('انجام شده','رد شده')
                 """,
                 (telegram_id, telegram_id),
             )
@@ -610,7 +616,9 @@ def get_orders_for_user_by_statuses(telegram_id: int, status_titles: list[str]):
                 """,
                 params,
             )
-            return [dict(r) for r in c.fetchall()]
+            rows = c.fetchall()
+            if rows:
+                return [dict(r) for r in rows]
         except sqlite3.OperationalError:
             pass
         try:

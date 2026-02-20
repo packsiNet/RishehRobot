@@ -106,7 +106,7 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(msg, reply_markup=ORDER_MENU)
         return ConversationHandler.END
     if text == "⏳ سفارش‌های درحال انجام":
-        statuses = ["ثبت شده", "در دست بررسی", "تایید شده برای انجام"]
+        statuses = ["ثبت شده", "در دست بررسی", "در حال بررسی", "تایید شده برای انجام"]
         lst = get_orders_for_user_by_statuses(user.id, statuses)
         if not lst:
             await update.message.reply_text("سفارشی در حال انجام نیست.", reply_markup=ORDER_MENU)
