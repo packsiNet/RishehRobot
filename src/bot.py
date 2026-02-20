@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime
 from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, ConversationHandler, ContextTypes, CallbackQueryHandler, filters
 from .config import TELEGRAM_BOT_TOKEN, ADMIN_USER_IDS, APP_URL
@@ -13,6 +14,7 @@ from .db import (
     get_order_by_id,
     get_order_stats_for_user,
     get_order_stats_for_identity,
+    cancel_order_by_id,
     set_content,
     get_content,
     create_ticket,
@@ -251,7 +253,7 @@ def build_app():
     app.add_handler(CommandHandler("menu", menu))
     app.add_handler(CommandHandler("setcontent", setcontent))
     app.add_handler(CommandHandler("addorder", addorder))
-    app.add_handler(CallbackQueryHandler(on_item_callback, pattern=r"^(item:\d+|order:\d+|back:cat:\d+|orderinfo:\d+)$"))
+    app.add_handler(CallbackQueryHandler(on_item_callback, pattern=r"^(item:\d+|order:\d+|back:cat:\d+|orderinfo:\d+|ordercancel:\d+)$"))
     conv = ConversationHandler(
         entry_points=[MessageHandler(filters.TEXT & ~filters.COMMAND, handle_menu)],
         states={
@@ -277,8 +279,24 @@ async def on_item_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not order:
             await query.message.reply_text("سفارش یافت نشد.")
             return
-        msg = f"سفارش #{order['id']}\nعنوان: {order['title']}\nوضعیت: {order['status']}\nتاریخ: {order['created_at']}"
-        await query.message.reply_text(msg)
+        ts = order.get("created_at") or ""
+        j = to_jalali_str(ts)
+        msg = f"سفارش #{order['id']}\nعنوان: {order['title']}\nوضعیت: {order['status']}\nتاریخ: {j}"
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton("لغو سفارش", callback_data=f"ordercancel:{order['id']}")]])
+        await query.message.reply_text(msg, reply_markup=kb)
+        return
+    if data.startswith("ordercancel:"):
+        try:
+            oid = int(data.split(":", 1)[1])
+        except Exception:
+            return
+        user = update.effective_user
+        ok = cancel_order_by_id(oid, user.id)
+        if ok:
+            await query.message.edit_text("سفارش لغو شد ✅")
+            await query.message.edit_reply_markup(reply_markup=None)
+        else:
+            await query.message.reply_text("لغو سفارش ممکن نیست.")
         return
     if data.startswith("item:"):
         try:
@@ -329,6 +347,38 @@ def main():
         raise RuntimeError("TELEGRAM_BOT_TOKEN تنظیم نشده است")
     app = build_app()
     app.run_polling()
+
+def g2j(y, m, d):
+    g_d_m = [0,31,59,90,120,151,181,212,243,273,304,334]
+    if y > 1600:
+        jy = 979
+        y -= 1600
+    else:
+        jy = 0
+        y -= 621
+    gy = y + 621
+    leap_g = (gy+3)//4 - (gy+99)//100 + (gy+399)//400
+    day = 365*y + (y+3)//4 - (y+99)//100 + (y+399)//400 - 80 + d + g_d_m[m-1]
+    if m>2 and ((gy%4==0 and gy%100!=0) or (gy%400==0)):
+        day += 1
+    jy += 33*(day//12053)
+    day %= 12053
+    jy += 4*(day//1461)
+    day %= 1461
+    if day > 365:
+        jy += (day-1)//365
+        day = (day-1)%365
+    jm = 1 + (day<186 and day//31 or (day-186)//30)
+    jd = 1 + (day<186 and day%31 or (day-186)%30)
+    return jy, jm, jd
+
+def to_jalali_str(ts: str) -> str:
+    try:
+        dt = datetime.strptime(ts[:19], "%Y-%m-%d %H:%M:%S")
+        jy,jm,jd = g2j(dt.year, dt.month, dt.day)
+        return f"{jy:04d}/{jm:02d}/{jd:02d} {dt.strftime('%H:%M')}"
+    except Exception:
+        return ts
 
 if __name__ == "__main__":
     main()

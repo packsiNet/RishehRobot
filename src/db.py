@@ -107,6 +107,7 @@ def init_db():
             'در حال انجام',
             'انجام شده',
             'رد شده',
+            'لغو شده'
         ]:
             c.execute(
                 "INSERT INTO orderstatus (title) SELECT ? WHERE NOT EXISTS (SELECT 1 FROM orderstatus WHERE title=?)",
@@ -916,6 +917,41 @@ def get_order_by_id(order_id: int):
             return dict(row) if row else None
         except sqlite3.OperationalError:
             return None
+
+def cancel_order_by_id(order_id: int, telegram_id: int) -> bool:
+    with connect() as conn:
+        c = conn.cursor()
+        try:
+            c.execute("SELECT id FROM orderstatus WHERE title='لغو شده'")
+            st = c.fetchone()
+            if st:
+                statusid = st["id"]
+                c.execute(
+                    """
+                    UPDATE orders SET statusid=?
+                    WHERE id IN (
+                        SELECT o.id FROM orders o JOIN users u ON u.id=o.userid WHERE o.id=? AND u.telegramid=?
+                    )
+                    """,
+                    (statusid, order_id, telegram_id),
+                )
+                if c.rowcount:
+                    return True
+        except sqlite3.OperationalError:
+            pass
+        try:
+            c.execute(
+                """
+                UPDATE orders SET status='لغو شده'
+                WHERE id IN (
+                    SELECT o.id FROM orders o JOIN users u ON u.id=o.user_id WHERE o.id=? AND u.telegramid=?
+                )
+                """,
+                (order_id, telegram_id),
+            )
+            return c.rowcount > 0
+        except sqlite3.OperationalError:
+            return False
 
 def create_order_for_item(telegram_id: int, item_id: int):
     with connect() as conn:
