@@ -54,6 +54,8 @@ def init_db():
         for col, typ in expected.items():
             if col not in cols:
                 c.execute(f"ALTER TABLE users ADD COLUMN {col} {typ}")
+        # Unique index on username (NULLs allowed, SQLite permits multiple NULLs)
+        c.execute("CREATE UNIQUE INDEX IF NOT EXISTS ux_users_username ON users(username)")
         c.execute(
             """
             CREATE TABLE IF NOT EXISTS orders (
@@ -486,6 +488,79 @@ def get_orders_for_user(telegram_id: int):
         except sqlite3.OperationalError:
             return []
 
+def get_orders_for_identity(telegram_id: int | None, username: str | None):
+    with connect() as conn:
+        c = conn.cursor()
+        # New schema by telegram id or username
+        try:
+            if telegram_id is not None:
+                c.execute(
+                    """
+                    SELECT o.id, i.title AS title, s.title AS status, o.created_at
+                    FROM orders o
+                    JOIN users u ON u.id = o.userid
+                    JOIN items i ON i.id = o.itemid
+                    JOIN orderstatus s ON s.id = o.statusid
+                    WHERE u.telegramid = ?
+                    ORDER BY o.created_at DESC
+                    """,
+                    (telegram_id,),
+                )
+                rows = c.fetchall()
+                if rows:
+                    return [dict(r) for r in rows]
+            if username:
+                c.execute(
+                    """
+                    SELECT o.id, i.title AS title, s.title AS status, o.created_at
+                    FROM orders o
+                    JOIN users u ON u.id = o.userid
+                    JOIN items i ON i.id = o.itemid
+                    JOIN orderstatus s ON s.id = o.statusid
+                    WHERE u.username = ?
+                    ORDER BY o.created_at DESC
+                    """,
+                    (username,),
+                )
+                rows = c.fetchall()
+                if rows:
+                    return [dict(r) for r in rows]
+        except sqlite3.OperationalError:
+            pass
+        # Legacy schema fallback
+        try:
+            if telegram_id is not None:
+                c.execute(
+                    """
+                    SELECT o.id, o.title AS title, o.status AS status, o.created_at
+                    FROM orders o
+                    JOIN users u ON u.id = o.user_id
+                    WHERE u.telegramid = ?
+                    ORDER BY o.created_at DESC
+                    """,
+                    (telegram_id,),
+                )
+                rows = c.fetchall()
+                if rows:
+                    return [dict(r) for r in rows]
+            if username:
+                c.execute(
+                    """
+                    SELECT o.id, o.title AS title, o.status AS status, o.created_at
+                    FROM orders o
+                    JOIN users u ON u.id = o.user_id
+                    WHERE u.username = ?
+                    ORDER BY o.created_at DESC
+                    """,
+                    (username,),
+                )
+                rows = c.fetchall()
+                if rows:
+                    return [dict(r) for r in rows]
+        except sqlite3.OperationalError:
+            return []
+    return []
+
 def get_order_stats_for_user(telegram_id: int):
     with connect() as conn:
         c = conn.cursor()
@@ -561,6 +636,177 @@ def get_order_stats_for_user(telegram_id: int):
             return {"total": total, "doing": doing, "done": done}
         except sqlite3.OperationalError:
             return {"total": 0, "doing": 0, "done": 0}
+
+def get_order_stats_for_identity(telegram_id: int | None, username: str | None):
+    with connect() as conn:
+        c = conn.cursor()
+        # New schema path
+        try:
+            params = None
+            if telegram_id is not None:
+                params = (telegram_id,)
+                where = "u.telegramid = ?"
+            elif username:
+                params = (username,)
+                where = "u.username = ?"
+            else:
+                return {"total": 0, "doing": 0, "done": 0}
+            c.execute(
+                f"""
+                SELECT COUNT(1) FROM orders o
+                JOIN users u ON u.id=o.userid
+                WHERE {where}
+                """,
+                params,
+            )
+            total = c.fetchone()[0]
+            c.execute(
+                f"""
+                SELECT COUNT(1)
+                FROM orders o
+                JOIN users u ON u.id=o.userid
+                JOIN orderstatus s ON s.id=o.statusid
+                WHERE {where} AND s.title IN ('در حال انجام','تایید شده برای انجام','در دست بررسی','ثبت شده')
+                """,
+                params,
+            )
+            doing = c.fetchone()[0]
+            c.execute(
+                f"""
+                SELECT COUNT(1)
+                FROM orders o
+                JOIN users u ON u.id=o.userid
+                JOIN orderstatus s ON s.id=o.statusid
+                WHERE {where} AND s.title IN ('انجام شده','رد شده')
+                """,
+                params,
+            )
+            done = c.fetchone()[0]
+            if total or doing or done:
+                return {"total": total, "doing": doing, "done": done}
+        except sqlite3.OperationalError:
+            pass
+        # Legacy schema fallback
+        try:
+            if telegram_id is not None:
+                params = (telegram_id,)
+                where = "u.telegramid = ?"
+            elif username:
+                params = (username,)
+                where = "u.username = ?"
+            else:
+                return {"total": 0, "doing": 0, "done": 0}
+            c.execute(
+                f"""
+                SELECT COUNT(1) FROM orders o
+                JOIN users u ON u.id=o.user_id
+                WHERE {where}
+                """,
+                params,
+            )
+            total = c.fetchone()[0]
+            c.execute(
+                f"""
+                SELECT COUNT(1) FROM orders o
+                JOIN users u ON u.id=o.user_id
+                WHERE {where} AND o.status IN ('ثبت شده','در دست بررسی','در حال بررسی','تایید شده برای انجام')
+                """,
+                params,
+            )
+            doing = c.fetchone()[0]
+            c.execute(
+                f"""
+                SELECT COUNT(1) FROM orders o
+                JOIN users u ON u.id=o.user_id
+                WHERE {where} AND o.status IN ('انجام شده','رد شده')
+                """,
+                params,
+            )
+            done = c.fetchone()[0]
+            return {"total": total, "doing": doing, "done": done}
+        except sqlite3.OperationalError:
+            return {"total": 0, "doing": 0, "done": 0}
+
+def get_orders_for_user_by_statuses_identity(telegram_id: int | None, username: str | None, status_titles: list[str]):
+    if not status_titles:
+        return []
+    with connect() as conn:
+        c = conn.cursor()
+        try:
+            if telegram_id is not None:
+                placeholders = ",".join(["?"] * len(status_titles))
+                params = [telegram_id, *status_titles]
+                c.execute(
+                    f"""
+                    SELECT o.id, i.title AS title, s.title AS status, o.created_at
+                    FROM orders o
+                    JOIN users u ON u.id = o.userid
+                    JOIN items i ON i.id = o.itemid
+                    JOIN orderstatus s ON s.id = o.statusid
+                    WHERE u.telegramid = ? AND s.title IN ({placeholders})
+                    ORDER BY o.created_at DESC
+                    """,
+                    params,
+                )
+                rows = c.fetchall()
+                if rows:
+                    return [dict(r) for r in rows]
+            if username:
+                placeholders = ",".join(["?"] * len(status_titles))
+                params = [username, *status_titles]
+                c.execute(
+                    f"""
+                    SELECT o.id, i.title AS title, s.title AS status, o.created_at
+                    FROM orders o
+                    JOIN users u ON u.id = o.userid
+                    JOIN items i ON i.id = o.itemid
+                    JOIN orderstatus s ON s.id = o.statusid
+                    WHERE u.username = ? AND s.title IN ({placeholders})
+                    ORDER BY o.created_at DESC
+                    """,
+                    params,
+                )
+                rows = c.fetchall()
+                if rows:
+                    return [dict(r) for r in rows]
+        except sqlite3.OperationalError:
+            pass
+        try:
+            if telegram_id is not None:
+                placeholders = ",".join(["?"] * len(status_titles))
+                params = [telegram_id, *status_titles]
+                c.execute(
+                    f"""
+                    SELECT o.id, o.title AS title, o.status AS status, o.created_at
+                    FROM orders o
+                    JOIN users u ON u.id = o.user_id
+                    WHERE u.telegramid = ? AND o.status IN ({placeholders})
+                    ORDER BY o.created_at DESC
+                    """,
+                    params,
+                )
+                rows = c.fetchall()
+                if rows:
+                    return [dict(r) for r in rows]
+            if username:
+                placeholders = ",".join(["?"] * len(status_titles))
+                params = [username, *status_titles]
+                c.execute(
+                    f"""
+                    SELECT o.id, o.title AS title, o.status AS status, o.created_at
+                    FROM orders o
+                    JOIN users u ON u.id = o.user_id
+                    WHERE u.username = ? AND o.status IN ({placeholders})
+                    ORDER BY o.created_at DESC
+                    """,
+                    params,
+                )
+                rows = c.fetchall()
+                if rows:
+                    return [dict(r) for r in rows]
+        except sqlite3.OperationalError:
+            return []
+    return []
 
 def get_orders_for_user_by_status(telegram_id: int, status_title: str):
     with connect() as conn:

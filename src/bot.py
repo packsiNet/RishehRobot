@@ -8,8 +8,11 @@ from .db import (
     get_orders_for_user,
     get_orders_for_user_by_status,
     get_orders_for_user_by_statuses,
+    get_orders_for_identity,
+    get_orders_for_user_by_statuses_identity,
     get_order_by_id,
     get_order_stats_for_user,
+    get_order_stats_for_identity,
     set_content,
     get_content,
     create_ticket,
@@ -97,7 +100,7 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(msg, reply_markup=ORDER_MENU)
         return ConversationHandler.END
     if text == "📊 اعلام وضعیت سفارش‌ها":
-        stats = get_order_stats_for_user(user.id)
+        stats = get_order_stats_for_identity(user.id, user.username)
         msg = (
             f"تعداد کل سفارشات: {stats['total']}\n"
             f"تعداد سفارشات در حال انجام: {stats['doing']}\n"
@@ -107,7 +110,7 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
     if text == "⏳ سفارش‌های درحال انجام":
         statuses = ["ثبت شده", "در دست بررسی", "در حال بررسی", "تایید شده برای انجام"]
-        lst = get_orders_for_user_by_statuses(user.id, statuses)
+        lst = get_orders_for_user_by_statuses_identity(user.id, user.username, statuses)
         if not lst:
             await update.message.reply_text("سفارشی در حال انجام نیست.", reply_markup=ORDER_MENU)
             return ConversationHandler.END
@@ -118,7 +121,7 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
     if text == "✅ سفارش‌های تکمیل شده":
         statuses = ["انجام شده", "رد شده"]
-        lst = get_orders_for_user_by_statuses(user.id, statuses)
+        lst = get_orders_for_user_by_statuses_identity(user.id, user.username, statuses)
         if not lst:
             await update.message.reply_text("سفارشی تکمیل‌شده ثبت نشده.", reply_markup=ORDER_MENU)
             return ConversationHandler.END
