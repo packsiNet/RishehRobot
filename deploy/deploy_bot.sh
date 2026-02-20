@@ -5,11 +5,11 @@ BOT_TOKEN="$1"
 RUN_AS="$2"
 DB_URL_UNUSED="$3"
 
-APP_DIR="/opt/rishehbot"
+APP_DIR="/opt/rishehrobot"
 VENV_DIR="${APP_DIR}/.venv"
 LOG_DIR="${APP_DIR}/logs"
 DATA_DIR="${APP_DIR}/data"
-SERVICE_NAME="rishehbot"
+SERVICE_NAME="rishehrobot"
 
 if [ -z "$RUN_AS" ]; then
   echo "RUN_AS (server user) is required as 2nd arg" >&2
