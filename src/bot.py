@@ -38,7 +38,12 @@ MAIN_BUTTONS = [
     ["💬 اگه نمی‌دونی؛ از من بپرس! 💬"],
     ["🌿 ریشه چیه؟ 🌿"],
 ]
-ADMIN_MAIN_BUTTONS = MAIN_BUTTONS + [["🛠 پنل ادمین"]]
+ADMIN_MAIN_BUTTONS = [
+    ["📦 لیست سفارشات"],
+    ["🧰 مدیریت خدمات"],
+    ["🎓 مدیریت بخش آموزش"],
+    ["👥 مدیریت کاربران"],
+]
 KB_USER = ReplyKeyboardMarkup(MAIN_BUTTONS, resize_keyboard=True, is_persistent=True)
 KB_ADMIN = ReplyKeyboardMarkup(ADMIN_MAIN_BUTTONS, resize_keyboard=True, is_persistent=True)
 BACK_TEXT = "⬅️ بازگشت"
@@ -59,24 +64,41 @@ logger = logging.getLogger("rishehbot")
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     get_or_create_user(user.id, user.username, user.first_name, user.last_name)
-    welcome_msg = (
-        "🌿 ریشه؛ جایی برای اینکه حتی از دور هم کنار خانواده‌ت باشی\n"
-        "ریشه برای وقت‌هایی شکل گرفت که از خونه دوری، 🏠\n"
-        "اما نمی‌خوای فاصله باعث بشه از مراقبت و پیگیری جا بمونی. 🤍\n"
-        "برای اینکه از وضعیت سلامت عزیزت باخبر باشی، 🩺\n"
-        "نیازهاشون رو مدیریت کنی و با خیال راحت‌تری زندگی کنی. 🕊️\n"
-        "اینجا خدمات سلامت، همراهی و کارهای روزمره خانواده تو یک ساختار یکپارچه کنار هم قرار گرفته 🔗\n"
-        "تا بتونی با آگاهی بیشتر و دغدغه کمتر کنارشون بمونی. 🌱\n"
-        "اگه آماده‌ای این همراهی رو شروع کنی، قدم اول رو تو بردار. 👣\n"
-        "✨ از منو یکی از مسیرها رو انتخاب کن تا با هم جلو بریم."
-    )
-    kb = KB_ADMIN if is_admin(user.id) else KB_USER
+    if is_admin(user.id):
+        welcome_msg = "سلام! به پنل ادمین خوش اومدی."
+        kb = KB_ADMIN
+    else:
+        welcome_msg = (
+            "🌿 ریشه؛ جایی برای اینکه حتی از دور هم کنار خانواده‌ت باشی\n"
+            "ریشه برای وقت‌هایی شکل گرفت که از خونه دوری، 🏠\n"
+            "اما نمی‌خوای فاصله باعث بشه از مراقبت و پیگیری جا بمونی. 🤍\n"
+            "برای اینکه از وضعیت سلامت عزیزت باخبر باشی، 🩺\n"
+            "نیازهاشون رو مدیریت کنی و با خیال راحت‌تری زندگی کنی. 🕊️\n"
+            "اینجا خدمات سلامت، همراهی و کارهای روزمره خانواده تو یک ساختار یکپارچه کنار هم قرار گرفته 🔗\n"
+            "تا بتونی با آگاهی بیشتر و دغدغه کمتر کنارشون بمونی. 🌱\n"
+            "اگه آماده‌ای این همراهی رو شروع کنی، قدم اول رو تو بردار. 👣\n"
+            "✨ از منو یکی از مسیرها رو انتخاب کن تا با هم جلو بریم."
+        )
+        kb = KB_USER
     await update.message.reply_text(welcome_msg, reply_markup=kb)
     logger.info("/start handled for user_id=%s", user.id)
 
 async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     user = update.effective_user
+    if is_admin(user.id):
+        if text == "📦 لیست سفارشات":
+            await update.message.reply_text("لیست سفارشات (ادمین) - به‌زودی.", reply_markup=KB_ADMIN)
+            return ConversationHandler.END
+        if text == "🧰 مدیریت خدمات":
+            await update.message.reply_text("مدیریت خدمات - به‌زودی.", reply_markup=KB_ADMIN)
+            return ConversationHandler.END
+        if text == "🎓 مدیریت بخش آموزش":
+            await update.message.reply_text("مدیریت بخش آموزش - به‌زودی.", reply_markup=KB_ADMIN)
+            return ConversationHandler.END
+        if text == "👥 مدیریت کاربران":
+            await update.message.reply_text("مدیریت کاربران - به‌زودی.", reply_markup=KB_ADMIN)
+            return ConversationHandler.END
     if text == BACK_TEXT:
         await update.message.reply_text("بازگشت به منوی اصلی.", reply_markup=(KB_ADMIN if is_admin(user.id) else KB_USER))
         return ConversationHandler.END
