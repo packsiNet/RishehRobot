@@ -9,6 +9,7 @@ try:
 except Exception:
     TEHRAN_TZ = None
 from .config import TELEGRAM_BOT_TOKEN, ADMIN_USER_IDS, APP_URL, SOCIAL_TELEGRAM_URL, SOCIAL_INSTAGRAM_URL, SOCIAL_YOUTUBE_URL, SOCIAL_LINKEDIN_URL, WEBSITE_URL, SUPPORT_URL
+import unicodedata
 from .db import (
     init_db,
     get_or_create_user,
@@ -88,6 +89,16 @@ CONTACT_MENU = ReplyKeyboardMarkup(
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s | %(message)s")
 logger = logging.getLogger("rishehbot")
+
+def _norm_fa(s: str) -> str:
+    if not s:
+        return ""
+    s = str(s)
+    s = s.replace("\u200c", "").replace("\u200f", "").replace("\u00a0", " ")
+    s = s.replace("ي", "ی").replace("ك", "ک")
+    s = unicodedata.normalize("NFKC", s)
+    s = " ".join(s.split())
+    return s.strip()
 
 def _resolve_admin_ids():
     try:
@@ -376,10 +387,15 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(msg, reply_markup=(KB_ADMIN if is_admin(user.id) else KB_USER))
         return ConversationHandler.END
     cats = get_categories_active()
-    if any(((c.get("title") or "").strip()) == text for c in cats):
-        selected = next((c for c in cats if ((c.get("title") or "").strip()) == text), None)
-        cat = selected or get_category_by_title(text)
-        items = get_items_by_category(selected["id"]) if selected else get_items_by_category_title(text)
+    norm_text = _norm_fa(text)
+    selected = None
+    for c in cats:
+        ct = _norm_fa(c.get("title") or "")
+        if ct == norm_text or norm_text in ct or ct in norm_text:
+            selected = c
+            break
+    cat = selected or get_category_by_title(text)
+    items = get_items_by_category(selected["id"]) if selected else get_items_by_category_title(text)
         if is_admin(user.id):
             if items:
                 ids = [i["id"] for i in items]
