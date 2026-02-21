@@ -46,6 +46,7 @@ from .db import (
     set_user_active,
     get_admin_telegram_ids,
     ensure_default_items,
+    create_user_request,
 )
 
 STATE_ASK_QUESTION = 1
@@ -175,6 +176,19 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (update.message.text or "").strip()
     user = update.effective_user
+    pending_cat = context.user_data.pop("awaiting_custom_request", None)
+    if pending_cat is not None:
+        try:
+            cat_id = int(pending_cat)
+        except Exception:
+            cat_id = None
+        get_or_create_user(user.id, user.username, user.first_name, user.last_name)
+        rid = create_user_request(user.id, text, cat_id)
+        if rid:
+            await update.message.reply_text("درخواستت ثبت شد ✅", reply_markup=(KB_ADMIN if is_admin(user.id) else KB_USER))
+        else:
+            await update.message.reply_text("ثبت درخواست انجام نشد.", reply_markup=(KB_ADMIN if is_admin(user.id) else KB_USER))
+        return ConversationHandler.END
     if is_admin(user.id):
         if text == "📦 لیست سفارشات":
             cats = get_categories_active()
@@ -410,9 +424,16 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
     else:
         if items:
-            inline_kb = InlineKeyboardMarkup(
-                [[InlineKeyboardButton(i["title"], callback_data=f"item:{i['id']}")] for i in items]
-            )
+            buttons = [[InlineKeyboardButton(i["title"], callback_data=f"item:{i['id']}")] for i in items]
+            cat_id = (selected["id"] if selected else (cat["id"] if cat else None))
+            try:
+                norm_title = _norm_fa(cat.get("title") if cat else "")
+            except Exception:
+                norm_title = ""
+            allowed = {"سلامت پیشگیرانه", "ساخت لحظه‌های به‌یاد ماندنی از راه‌دور", "انجام نیازهای روزمره"}
+            if cat_id is not None and norm_title in allowed:
+                buttons.append([InlineKeyboardButton("اونیکه میخوام نیست", callback_data=f"customreq:{cat_id}")])
+            inline_kb = InlineKeyboardMarkup(buttons)
             msg = cat["description"] if (cat and cat.get("description")) else "لطفاً یک مورد را انتخاب کن."
             await update.message.reply_text(msg, reply_markup=inline_kb)
             return ConversationHandler.END
@@ -527,7 +548,7 @@ def build_app():
     app.add_handler(CommandHandler("menu", menu))
     app.add_handler(CommandHandler("setcontent", setcontent))
     app.add_handler(CommandHandler("addorder", addorder))
-    app.add_handler(CallbackQueryHandler(on_item_callback, pattern=r"^(item:\d+|order:\d+|back:cat:\d+|orderinfo:\d+|ordercancel:\d+|adminorders:\d+|adminorderinfo:\d+:\d+|adminstatus:\d+:\d+|adminstatusset:\d+:\d+|adminuser:\d+|adminuserrole:\d+|adminuserblock:\d+|adminusers)$"))
+    app.add_handler(CallbackQueryHandler(on_item_callback, pattern=r"^(item:\d+|order:\d+|back:cat:\d+|orderinfo:\d+|ordercancel:\d+|adminorders:\d+|adminorderinfo:\d+:\d+|adminstatus:\d+:\d+|adminstatusset:\d+:\d+|adminuser:\d+|adminuserrole:\d+|adminuserblock:\d+|adminusers|customreq:\d+)$"))
     conv = ConversationHandler(
         entry_points=[MessageHandler(filters.TEXT & ~filters.COMMAND, handle_menu)],
         states={
@@ -544,6 +565,14 @@ async def on_item_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     data = query.data
+    if data.startswith("customreq:"):
+        try:
+            cid = int(data.split(":", 1)[1])
+        except Exception:
+            return
+        context.user_data["awaiting_custom_request"] = cid
+        await query.message.reply_text("لطفاً درخواستت رو کامل و دقیق بنویس و ارسال کن ✍️")
+        return
     if data.startswith("orderinfo:"):
         try:
             oid = int(data.split(":", 1)[1])

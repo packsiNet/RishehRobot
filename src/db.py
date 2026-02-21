@@ -203,6 +203,28 @@ def init_db():
         c.execute("CREATE INDEX IF NOT EXISTS idx_items_categoryid ON items(categoryid)")
         c.execute(
             """
+            CREATE TABLE IF NOT EXISTS requestuser (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                userid INTEGER NOT NULL,
+                categoryid INTEGER,
+                description TEXT NOT NULL,
+                statusid INTEGER NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(userid) REFERENCES users(id),
+                FOREIGN KEY(categoryid) REFERENCES categories(id),
+                FOREIGN KEY(statusid) REFERENCES orderstatus(id)
+            )
+            """
+        )
+        # Backward compatibility: add categoryid to requestuser if missing
+        try:
+            rq_cols = _table_columns(conn, "requestuser")
+            if "categoryid" not in rq_cols:
+                c.execute("ALTER TABLE requestuser ADD COLUMN categoryid INTEGER")
+        except Exception:
+            pass
+        c.execute(
+            """
             INSERT INTO content (key, value)
             SELECT 'about', 'ریشه؛ همراه رشد کسب‌وکار شماست.'
             WHERE NOT EXISTS (SELECT 1 FROM content WHERE key='about')
@@ -245,7 +267,7 @@ def init_db():
         )
         defaults = [
             ("🚨 تماس اضطراری 🚨", "▫️ارتباط در شرایط بحرانی با عزیزان و خانوده▫️", 1),
-            ("🔻 سلامت پیشگیرانه 🔻", "برای اینکه از حال و وضعیت سلامت عزیزت بی‌خبر نمونی./n با یک اقدام ساده، آگاهانه‌تر تصمیم بگیر. همین‌جا شروع کن.", 2),
+            ("🔻 سلامت پیشگیرانه 🔻", "برای اینکه از حال و وضعیت سلامت عزیزت بی‌خبر نمونی. با یک اقدام ساده، آگاهانه‌تر تصمیم بگیر. همین‌جا شروع کن.", 2),
             ("🔻 ساخت لحظه‌های به‌یاد ماندنی از راه‌دور🔻", "وقتی نمی‌تونی کنارشان باشی، می‌تونی لحظه بسازی.از سورپرایز تا مهمان‌کردن، تجربه رو بسپار به ریشه.", 3),
             ("🔻 انجام نیازهای روزمره🔻", "کارهایی که حضورت رو می‌خوان، اما از دوری.خرید و هماهنگی‌ها رو ثبت کن تا ما پیگیری کنیم.", 4),
         ]
@@ -1484,3 +1506,23 @@ def get_items_by_category_title(title: str):
             (cat_id,),
         )
         return [dict(r) for r in c.fetchall()]
+
+def create_user_request(telegram_id: int, description: str, category_id: int | None = None) -> int | None:
+    with connect() as conn:
+        c = conn.cursor()
+        try:
+            c.execute("SELECT id FROM users WHERE telegramid=?", (telegram_id,))
+        except Exception:
+            c.execute("SELECT id FROM users WHERE telegram_id=?", (telegram_id,))
+        u = c.fetchone()
+        if not u:
+            return None
+        st = c.execute("SELECT id FROM orderstatus WHERE title=?", ("ثبت شده",)).fetchone()
+        sid = st["id"] if st else None
+        if sid is None:
+            return None
+        c.execute(
+            "INSERT INTO requestuser (userid, categoryid, description, statusid) VALUES (?, ?, ?, ?)",
+            (u["id"], category_id, description.strip(), sid),
+        )
+        return c.lastrowid
