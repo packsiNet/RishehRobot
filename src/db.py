@@ -275,11 +275,6 @@ def init_db():
                 "INSERT INTO categories (title, description, position) SELECT ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM categories WHERE title=?)",
                 (t, d, p, t),
             )
-        # Deactivate legacy "Emergency" category if it exists
-        try:
-            c.execute("UPDATE categories SET active=0 WHERE title IN (?, ?)", ("🚨 تماس اضطراری 🚨", "تماس اضطراری"))
-        except Exception:
-            pass
 
         items_by_category: dict[str, list[tuple[str, str]]] = {
             " سلامت پیشگیرانه": [
