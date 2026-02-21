@@ -53,6 +53,7 @@ from .db import (
     get_requests_by_category_admin,
     get_items_by_category_admin,
     set_item_active,
+    add_item,
 )
 
 STATE_ASK_QUESTION = 1
@@ -182,6 +183,44 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (update.message.text or "").strip()
     user = update.effective_user
+    pending_new = context.user_data.get("svc_new_item")
+    if pending_new:
+        stage = pending_new.get("stage")
+        cid = pending_new.get("cat_id")
+        if text == BACK_TEXT:
+            context.user_data.pop("svc_new_item", None)
+            items_all = get_items_by_category_admin(cid) or []
+            def marker(active):
+                return "🟢" if (active or 0) != 0 else "⚪"
+            buttons = [[InlineKeyboardButton(f"{marker(i['active'])} {i['title']}", callback_data=f"svcitem:{i['id']}:{cid}")] for i in items_all]
+            buttons.append([InlineKeyboardButton("➕ افزودن آیتم جدید", callback_data=f"svcadd:{cid}")])
+            inline_kb = InlineKeyboardMarkup(buttons) if buttons else None
+            await update.message.reply_text("آیتم‌های این دسته:", reply_markup=inline_kb or KB_ADMIN)
+            return ConversationHandler.END
+        if stage == "ask_title":
+            title = text
+            if not title:
+                await update.message.reply_text("عنوان معتبر وارد کن.")
+                return ConversationHandler.END
+            pending_new["title"] = title
+            pending_new["stage"] = "ask_desc"
+            context.user_data["svc_new_item"] = pending_new
+            await update.message.reply_text("توضیحات آیتم را ارسال کن:")
+            return ConversationHandler.END
+        if stage == "ask_desc":
+            desc = text
+            title = pending_new.get("title")
+            cid = int(cid)
+            iid = add_item(cid, title, desc, 1)
+            context.user_data.pop("svc_new_item", None)
+            items_all = get_items_by_category_admin(cid) or []
+            def marker(active):
+                return "🟢" if (active or 0) != 0 else "⚪"
+            buttons = [[InlineKeyboardButton(f"{marker(i['active'])} {i['title']}", callback_data=f"svcitem:{i['id']}:{cid}")] for i in items_all]
+            buttons.append([InlineKeyboardButton("➕ افزودن آیتم جدید", callback_data=f"svcadd:{cid}")])
+            inline_kb = InlineKeyboardMarkup(buttons) if buttons else None
+            await update.message.reply_text("آیتم جدید اضافه شد ✅", reply_markup=inline_kb or KB_ADMIN)
+            return ConversationHandler.END
     pending_cat = context.user_data.pop("awaiting_custom_request", None)
     if pending_cat is not None:
         try:
@@ -417,6 +456,7 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 [InlineKeyboardButton(f"{marker(i['active'])} {i['title']}", callback_data=f"svcitem:{i['id']}:{selected['id']}")]
                 for i in items_all
             ]
+            buttons.append([InlineKeyboardButton("➕ افزودن آیتم جدید", callback_data=f"svcadd:{selected['id']}")])
             inline_kb = InlineKeyboardMarkup(buttons) if buttons else None
             await update.message.reply_text("آیتم‌های این دسته:", reply_markup=inline_kb or KB_ADMIN)
             return ConversationHandler.END
@@ -560,7 +600,7 @@ def build_app():
     app.add_handler(CommandHandler("menu", menu))
     app.add_handler(CommandHandler("setcontent", setcontent))
     app.add_handler(CommandHandler("addorder", addorder))
-    app.add_handler(CallbackQueryHandler(on_item_callback, pattern=r"^(item:\d+|order:\d+|back:cat:\d+|orderinfo:\d+|ordercancel:\d+|adminorders:\d+|adminorderinfo:\d+:\d+|adminstatus:\d+:\d+|adminstatusset:\d+:\d+|adminuser:\d+|adminuserrole:\d+|adminuserblock:\d+|adminusers|customreq:\d+|adminreqs:\d+|adminreqinfo:\d+:\d+|svcitem:\d+:\d+|svcset:\d+:\d+:\d+|svcback:\d+)$"))
+    app.add_handler(CallbackQueryHandler(on_item_callback, pattern=r"^(item:\d+|order:\d+|back:cat:\d+|orderinfo:\d+|ordercancel:\d+|adminorders:\d+|adminorderinfo:\d+:\d+|adminstatus:\d+:\d+|adminstatusset:\d+:\d+|adminuser:\d+|adminuserrole:\d+|adminuserblock:\d+|adminusers|customreq:\d+|adminreqs:\d+|adminreqinfo:\d+:\d+|svcitem:\d+:\d+|svcset:\d+:\d+:\d+|svcback:\d+|svcadd:\d+)$"))
     conv = ConversationHandler(
         entry_points=[MessageHandler(filters.TEXT & ~filters.COMMAND, handle_menu)],
         states={
@@ -597,6 +637,14 @@ async def on_item_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         status_txt = "فعال" if active else "غیرفعال"
         await query.message.reply_text(f"مدیریت آیتم: {it.get('title') or ''}\nوضعیت فعلی: {status_txt}", reply_markup=kb)
         return
+    if data.startswith("svcadd:"):
+        try:
+            cid = int(data.split(":", 1)[1])
+        except Exception:
+            return
+        context.user_data["svc_new_item"] = {"cat_id": cid, "stage": "ask_title"}
+        await query.message.reply_text("عنوان آیتم جدید را ارسال کن:")
+        return
     if data.startswith("svcset:"):
         try:
             _, iid, val, cid = data.split(":", 3)
@@ -629,6 +677,7 @@ async def on_item_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton(f"{marker(i['active'])} {i['title']}", callback_data=f"svcitem:{i['id']}:{cid}")]
             for i in items_all
         ]
+        buttons.append([InlineKeyboardButton("➕ افزودن آیتم جدید", callback_data=f"svcadd:{cid}")])
         inline_kb = InlineKeyboardMarkup(buttons) if buttons else None
         if inline_kb:
             await query.message.reply_text("آیتم‌های این دسته:", reply_markup=inline_kb)
