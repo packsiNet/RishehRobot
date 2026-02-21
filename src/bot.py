@@ -136,6 +136,9 @@ def _resolve_admin_ids():
                 out.append(xi)
         logger.info("admin recipients resolved count=%d ids=%s", len(out), out)
         return out
+    except Exception as e:
+        logger.exception("resolve admin ids failed: %s", e)
+        return list(ADMIN_USER_IDS)
 
 def _mandatory_channel_id_or_username() -> str | None:
     cid = os.getenv("MANDATORY_CHANNEL_ID")
@@ -170,9 +173,6 @@ def _force_join_kb(item_id: int) -> InlineKeyboardMarkup:
         [InlineKeyboardButton("🔔 بررسی عضویت", callback_data=f"checkchannel:{item_id}")],
     ]
     return InlineKeyboardMarkup(buttons)
-    except Exception as e:
-        logger.exception("resolve admin ids failed: %s", e)
-        return list(ADMIN_USER_IDS)
 
 async def notify_admins(context: ContextTypes.DEFAULT_TYPE, text: str) -> int:
     ids = _resolve_admin_ids()
