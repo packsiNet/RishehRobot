@@ -1,7 +1,15 @@
 import os
 from dotenv import load_dotenv
+from pathlib import Path
 
 load_dotenv()
+try:
+    base_dir = Path(__file__).resolve().parent.parent
+    env_path = base_dir / ".env"
+    if env_path.exists():
+        load_dotenv(env_path.as_posix())
+except Exception:
+    pass
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN") or os.getenv("BOT_TOKEN", "")
 DB_PATH = os.getenv("DB_PATH", "data/app.db")

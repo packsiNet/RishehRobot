@@ -721,6 +721,16 @@ async def addorder(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def health(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("OK ✅")
 
+async def membership(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        ch = _mandatory_channel_id_or_username()
+        user = update.effective_user
+        st = await _is_member(context.bot, user.id)
+        msg = f"کانال: {ch or '-'}\nوضعیت عضویت: {'عضو' if st else 'عضو نیست'}"
+    except Exception as e:
+        msg = f"بررسی ناموفق: {e}"
+    await update.message.reply_text(msg)
+
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
     logger.exception("Unhandled exception: %s", context.error)
 
@@ -731,6 +741,12 @@ def build_app():
         text = "ربات با موفقیت راه‌اندازی شد ✅"
         if APP_URL:
             text += f"\nآدرس برنامه: {APP_URL}"
+        try:
+            ch = _mandatory_channel_id_or_username()
+            if ch:
+                text += f"\nکانال اجباری: {ch}"
+        except Exception:
+            pass
         for admin_id in ADMIN_USER_IDS:
             try:
                 await app.bot.send_message(chat_id=admin_id, text=text)
@@ -739,6 +755,7 @@ def build_app():
     app = Application.builder().token(TELEGRAM_BOT_TOKEN).post_init(post_init).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("health", health))
+    app.add_handler(CommandHandler("membership", membership))
     app.add_handler(CommandHandler("menu", menu))
     app.add_handler(CommandHandler("setcontent", setcontent))
     app.add_handler(CommandHandler("addorder", addorder))
