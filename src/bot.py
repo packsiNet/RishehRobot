@@ -9,7 +9,7 @@ try:
     TEHRAN_TZ = ZoneInfo("Asia/Tehran")
 except Exception:
     TEHRAN_TZ = None
-from .config import TELEGRAM_BOT_TOKEN, ADMIN_USER_IDS, APP_URL, SOCIAL_TELEGRAM_URL, SOCIAL_INSTAGRAM_URL, SOCIAL_YOUTUBE_URL, SOCIAL_LINKEDIN_URL, WEBSITE_URL, SUPPORT_URL
+from .config import TELEGRAM_BOT_TOKEN, ADMIN_USER_IDS, APP_URL, SOCIAL_TELEGRAM_URL, SOCIAL_INSTAGRAM_URL, SOCIAL_YOUTUBE_URL, SOCIAL_LINKEDIN_URL, WEBSITE_URL, SUPPORT_URL, MANDATORY_CHANNEL_ID, MANDATORY_CHANNEL_USERNAME, MANDATORY_CHANNEL_URL
 import unicodedata
 from .db import (
     init_db,
@@ -140,13 +140,17 @@ def _resolve_admin_ids():
         logger.exception("resolve admin ids failed: %s", e)
         return list(ADMIN_USER_IDS)
 
-def _mandatory_channel_id_or_username() -> str | None:
-    cid = os.getenv("MANDATORY_CHANNEL_ID")
-    if cid and cid.strip():
-        return cid.strip()
-    uname = os.getenv("MANDATORY_CHANNEL_USERNAME")
-    if uname and uname.strip():
-        return uname.strip()
+def _mandatory_channel_id_or_username() -> str | int | None:
+    cid = (MANDATORY_CHANNEL_ID or "").strip()
+    if cid:
+        # اگر شناسه عددی است، به int تبدیل شود
+        try:
+            return int(cid)
+        except Exception:
+            return cid
+    uname = (MANDATORY_CHANNEL_USERNAME or "").strip()
+    if uname:
+        return uname
     return None
 
 async def _is_member(bot, user_id: int) -> bool:
@@ -167,7 +171,7 @@ async def _is_member(bot, user_id: int) -> bool:
         return False
 
 def _force_join_kb(item_id: int) -> InlineKeyboardMarkup:
-    join_url = os.getenv("MANDATORY_CHANNEL_URL", "https://t.me/+wq00h6LuLBsyOWJk")
+    join_url = (MANDATORY_CHANNEL_URL or "https://t.me/rishehapp")
     buttons = [
         [InlineKeyboardButton("📢 عضویت در کانال ریشه", url=join_url)],
         [InlineKeyboardButton("🔔 بررسی عضویت", callback_data=f"checkchannel:{item_id}")],
