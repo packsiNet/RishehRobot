@@ -45,6 +45,7 @@ from .db import (
     set_user_role,
     set_user_active,
     get_admin_telegram_ids,
+    ensure_default_items,
 )
 
 STATE_ASK_QUESTION = 1
@@ -510,6 +511,7 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
 
 def build_app():
     init_db()
+    ensure_default_items()
     async def post_init(app: Application):
         text = "ربات با موفقیت راه‌اندازی شد ✅"
         if APP_URL:
