@@ -53,7 +53,7 @@ MAIN_BUTTONS = [
     ["🔎 چطور به ریشه اعتماد کنم؟ 🔎"],
     ["💬 اگه نمی‌دونی؛ از من بپرس! 💬"],
     ["🎥 آموزش تصویری"],
-    ["🌿 ارتباط با ریشه "],
+    ["🌿 ارتباط با ریشه"],
 ]
 ADMIN_MAIN_BUTTONS = [
     ["📦 لیست سفارشات"],
@@ -198,7 +198,7 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if text == BACK_TEXT:
         await update.message.reply_text("بازگشت به منوی اصلی.", reply_markup=(KB_ADMIN if is_admin(user.id) else KB_USER))
         return ConversationHandler.END
-    if text == "🌿 ارتباط با ریشه ":
+    if text in ("🌿 ارتباط با ریشه", "🌿 ارتباط با ریشه "):
         msg = (
             "اگه می‌خوای بیشتر با ریشه در ارتباط باشی، چند راه ساده پیش‌روته 👇\n"
             "📲 دنبال کردن صفحات مجازی ریشه\n"
