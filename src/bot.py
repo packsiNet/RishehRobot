@@ -353,7 +353,7 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "برای اطلاعات بیشتر از هر سرویس، می‌تونی روی هرکدوم کلیک کنی تا توضیحات کامل برات ارسال بشه ✨"
         )
         if cats:
-            rows = [[c["title"]] for c in cats] + [["🎥 آموزش تصویری"], [BACK_TEXT]]
+            rows = [[c["title"]] for c in cats] + [[BACK_TEXT]]
             kb = ReplyKeyboardMarkup(rows, resize_keyboard=True, is_persistent=True)
             await update.message.reply_text(msg, reply_markup=kb)
         else:
@@ -549,7 +549,7 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(msg, reply_markup=inline_kb)
             return ConversationHandler.END
         if cat and cat.get("description"):
-            rows = [[c["title"]] for c in cats] + [["🎥 آموزش تصویری"], [BACK_TEXT]]
+            rows = [[c["title"]] for c in cats] + [[BACK_TEXT]]
             kb = ReplyKeyboardMarkup(rows, resize_keyboard=True, is_persistent=True)
             await update.message.reply_text(cat["description"], reply_markup=kb)
             return ConversationHandler.END
