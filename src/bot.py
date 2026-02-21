@@ -54,9 +54,15 @@ from .db import (
     get_items_by_category_admin,
     set_item_active,
     add_item,
+    add_tutorial,
+    get_tutorials_all,
+    get_tutorial_by_id,
+    set_tutorial_active,
+    delete_tutorial_by_id,
 )
 
 STATE_ASK_QUESTION = 1
+STATE_TUT_ADD = 2
 
 MAIN_BUTTONS = [
     ["🚀 شروع همراهی 🚀"],
@@ -184,6 +190,7 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (update.message.text or "").strip()
     user = update.effective_user
     pending_new = context.user_data.get("svc_new_item")
+    pending_tut = context.user_data.get("tut_new")
     if pending_new:
         stage = pending_new.get("stage")
         cid = pending_new.get("cat_id")
@@ -221,6 +228,41 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             inline_kb = InlineKeyboardMarkup(buttons) if buttons else None
             await update.message.reply_text("آیتم جدید اضافه شد ✅", reply_markup=inline_kb or KB_ADMIN)
             return ConversationHandler.END
+    if pending_tut:
+        stage = pending_tut.get("stage")
+        if text == BACK_TEXT:
+            context.user_data.pop("tut_new", None)
+            tuts = get_tutorials_all()
+            buttons = [[InlineKeyboardButton(t["title"], callback_data=f"tutitem:{t['id']}")] for t in tuts]
+            buttons.append([InlineKeyboardButton("➕ افزودن آموزش جدید", callback_data="tutadd")])
+            await update.message.reply_text("ویدیوهای آموزشی:", reply_markup=InlineKeyboardMarkup(buttons) if buttons else KB_ADMIN)
+            return ConversationHandler.END
+        if stage == "ask_title":
+            pending_tut["title"] = text
+            pending_tut["stage"] = "ask_desc"
+            context.user_data["tut_new"] = pending_tut
+            await update.message.reply_text("توضیحات آموزش را ارسال کن:")
+            return ConversationHandler.END
+        if stage == "ask_desc":
+            pending_tut["description"] = text
+            pending_tut["stage"] = "ask_src"
+            context.user_data["tut_new"] = pending_tut
+            await update.message.reply_text("لینک ویدیو را ارسال کن یا فایل ویدیو را آپلود کن.")
+            return ConversationHandler.END
+        if stage == "ask_src":
+            link = text.strip()
+            if not link:
+                await update.message.reply_text("لینک معتبر ارسال کن یا فایل ویدیو را آپلود کن.")
+                return ConversationHandler.END
+            title = pending_tut.get("title")
+            desc = pending_tut.get("description")
+            tid = add_tutorial(title, desc, None, link, 1)
+            context.user_data.pop("tut_new", None)
+            tuts = get_tutorials_all()
+            buttons = [[InlineKeyboardButton(t["title"], callback_data=f"tutitem:{t['id']}")] for t in tuts]
+            buttons.append([InlineKeyboardButton("➕ افزودن آموزش جدید", callback_data="tutadd")])
+            await update.message.reply_text("آموزش جدید ذخیره شد ✅", reply_markup=InlineKeyboardMarkup(buttons) if buttons else KB_ADMIN)
+            return ConversationHandler.END
     pending_cat = context.user_data.pop("awaiting_custom_request", None)
     if pending_cat is not None:
         try:
@@ -251,7 +293,11 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("یک دسته‌بندی خدمات را انتخاب کن:", reply_markup=kb)
             return ConversationHandler.END
         if text == "🎓 مدیریت بخش آموزش":
-            await update.message.reply_text("مدیریت بخش آموزش - به‌زودی.", reply_markup=KB_ADMIN)
+            tuts = get_tutorials_all()
+            buttons = [[InlineKeyboardButton(t["title"], callback_data=f"tutitem:{t['id']}")] for t in tuts]
+            buttons.append([InlineKeyboardButton("➕ افزودن آموزش جدید", callback_data="tutadd")])
+            kb = InlineKeyboardMarkup(buttons) if buttons else None
+            await update.message.reply_text("ویدیوهای آموزشی:", reply_markup=kb or KB_ADMIN)
             return ConversationHandler.END
         if text == "👥 مدیریت کاربران":
             users = get_all_users_admin()
@@ -531,6 +577,49 @@ async def receive_question(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info("ticket created user_id=%s", user.id)
     return ConversationHandler.END
 
+async def handle_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    pending_tut = context.user_data.get("tut_new")
+    if not pending_tut or pending_tut.get("stage") != "ask_src":
+        return
+    v = update.message.video
+    d = update.message.document
+    file = None
+    filename = None
+    if v is not None:
+        file = v
+        filename = None
+    elif d is not None and (d.mime_type or "").startswith("video/"):
+        file = d
+        filename = d.file_name
+    if not file:
+        return
+    # آماده‌سازی مسیر ذخیره فایل
+    base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    vid_dir = os.path.join(base_dir, "files", "videos")
+    try:
+        os.makedirs(vid_dir, exist_ok=True)
+    except Exception:
+        pass
+    # نام فایل امن
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    ext = os.path.splitext(filename)[1] if filename else ".mp4"
+    dest_path = os.path.join(vid_dir, f"tut_{ts}{ext}")
+    tg_file = await context.bot.get_file(file.file_id)
+    try:
+        await tg_file.download_to_drive(dest_path)
+    except Exception:
+        # fallback
+        await tg_file.download(dest_path)
+    title = pending_tut.get("title")
+    desc = pending_tut.get("description")
+    add_tutorial(title, desc, dest_path, None, 1)
+    context.user_data.pop("tut_new", None)
+    tuts = get_tutorials_all()
+    buttons = [[InlineKeyboardButton(t["title"], callback_data=f"tutitem:{t['id']}")] for t in tuts]
+    buttons.append([InlineKeyboardButton("➕ افزودن آموزش جدید", callback_data="tutadd")])
+    await update.message.reply_text("آموزش جدید ذخیره شد ✅", reply_markup=InlineKeyboardMarkup(buttons) if buttons else KB_ADMIN)
+    return ConversationHandler.END
+
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     await update.message.reply_text("لغو شد.", reply_markup=(KB_ADMIN if is_admin(user.id) else KB_USER))
@@ -600,7 +689,8 @@ def build_app():
     app.add_handler(CommandHandler("menu", menu))
     app.add_handler(CommandHandler("setcontent", setcontent))
     app.add_handler(CommandHandler("addorder", addorder))
-    app.add_handler(CallbackQueryHandler(on_item_callback, pattern=r"^(item:\d+|order:\d+|back:cat:\d+|orderinfo:\d+|ordercancel:\d+|adminorders:\d+|adminorderinfo:\d+:\d+|adminstatus:\d+:\d+|adminstatusset:\d+:\d+|adminuser:\d+|adminuserrole:\d+|adminuserblock:\d+|adminusers|customreq:\d+|adminreqs:\d+|adminreqinfo:\d+:\d+|svcitem:\d+:\d+|svcset:\d+:\d+:\d+|svcback:\d+|svcadd:\d+)$"))
+    app.add_handler(CallbackQueryHandler(on_item_callback, pattern=r"^(item:\d+|order:\d+|back:cat:\d+|orderinfo:\d+|ordercancel:\d+|adminorders:\d+|adminorderinfo:\d+:\d+|adminstatus:\d+:\d+|adminstatusset:\d+:\d+|adminuser:\d+|adminuserrole:\d+|adminuserblock:\d+|adminusers|customreq:\d+|adminreqs:\d+|adminreqinfo:\d+:\d+|svcitem:\d+:\d+|svcset:\d+:\d+:\d+|svcback:\d+|svcadd:\d+|tutitem:\d+|tutset:\d+:\d+|tutdel:\d+|tutback|tutadd)$"))
+    app.add_handler(MessageHandler((filters.VIDEO | filters.Document.ALL), handle_media))
     conv = ConversationHandler(
         entry_points=[MessageHandler(filters.TEXT & ~filters.COMMAND, handle_menu)],
         states={
@@ -683,6 +773,66 @@ async def on_item_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.message.reply_text("آیتم‌های این دسته:", reply_markup=inline_kb)
         else:
             await query.message.reply_text("آیتمی برای این دسته ثبت نشده.")
+        return
+    if data == "tutadd":
+        context.user_data["tut_new"] = {"stage": "ask_title"}
+        await query.message.reply_text("عنوان آموزش را ارسال کن:")
+        return
+    if data == "tutback":
+        tuts = get_tutorials_all()
+        buttons = [[InlineKeyboardButton(t["title"], callback_data=f"tutitem:{t['id']}")] for t in tuts]
+        buttons.append([InlineKeyboardButton("➕ افزودن آموزش جدید", callback_data="tutadd")])
+        await query.message.reply_text("ویدیوهای آموزشی:", reply_markup=InlineKeyboardMarkup(buttons) if buttons else None)
+        return
+    if data.startswith("tutitem:"):
+        try:
+            tid = int(data.split(":", 1)[1])
+        except Exception:
+            return
+        t = get_tutorial_by_id(tid)
+        if not t:
+            await query.message.reply_text("آموزش یافت نشد.")
+            return
+        active = (t.get("active") or 0) != 0
+        toggle_to = 0 if active else 1
+        toggle_label = "غیرفعال کردن" if active else "فعال کردن"
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton(toggle_label, callback_data=f"tutset:{tid}:{toggle_to}")],
+            [InlineKeyboardButton("🗑 حذف آموزش", callback_data=f"tutdel:{tid}")],
+            [InlineKeyboardButton("⬅️ بازگشت", callback_data="tutback")],
+        ])
+        src = t.get("filelink") or t.get("filepath") or "—"
+        await query.message.reply_text(f"آموزش: {t.get('title') or ''}\nوضعیت: {'فعال' if active else 'غیرفعال'}\nمنبع: {src}", reply_markup=kb)
+        return
+    if data.startswith("tutset:"):
+        try:
+            _, tid, val = data.split(":", 2)
+            tid = int(tid); val = int(val)
+        except Exception:
+            return
+        ok = set_tutorial_active(tid, val)
+        if ok:
+            await query.message.reply_text("وضعیت آموزش به‌روزرسانی شد ✅")
+        else:
+            await query.message.reply_text("به‌روزرسانی انجام نشد.")
+        return
+    if data.startswith("tutdel:"):
+        try:
+            tid = int(data.split(":", 1)[1])
+        except Exception:
+            return
+        t = get_tutorial_by_id(tid)
+        ok = delete_tutorial_by_id(tid)
+        if ok:
+            try:
+                fp = (t.get("filepath") or "").strip() if t else ""
+                if fp and os.path.isfile(fp):
+                    os.remove(fp)
+            except Exception:
+                pass
+            await query.message.reply_text("آموزش حذف شد ✅")
+        else:
+            await query.message.reply_text("حذف انجام نشد.")
         return
     if data.startswith("customreq:"):
         try:

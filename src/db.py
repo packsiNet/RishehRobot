@@ -225,6 +225,19 @@ def init_db():
             pass
         c.execute(
             """
+            CREATE TABLE IF NOT EXISTS tutorial (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                description TEXT,
+                filepath TEXT,
+                filelink TEXT,
+                active INTEGER DEFAULT 1,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        c.execute(
+            """
             INSERT INTO content (key, value)
             SELECT 'about', 'ریشه؛ همراه رشد کسب‌وکار شماست.'
             WHERE NOT EXISTS (SELECT 1 FROM content WHERE key='about')
@@ -1587,6 +1600,55 @@ def set_item_active(item_id: int, active: int) -> bool:
         c = conn.cursor()
         try:
             c.execute("UPDATE items SET active=? WHERE id=?", (1 if active else 0, item_id))
+            return c.rowcount > 0
+        except Exception:
+            return False
+
+def add_tutorial(title: str, description: str | None, filepath: str | None, filelink: str | None, active: int = 1) -> int | None:
+    with connect() as conn:
+        c = conn.cursor()
+        try:
+            c.execute(
+                "INSERT INTO tutorial (title, description, filepath, filelink, active) VALUES (?, ?, ?, ?, ?)",
+                (title, description, filepath, filelink, active),
+            )
+            return c.lastrowid
+        except Exception:
+            return None
+
+def get_tutorials_all() -> list[dict]:
+    with connect() as conn:
+        c = conn.cursor()
+        try:
+            c.execute("SELECT id, title, description, filepath, filelink, active, created_at FROM tutorial ORDER BY id DESC")
+            return [dict(r) for r in c.fetchall()]
+        except Exception:
+            return []
+
+def get_tutorial_by_id(tut_id: int) -> dict | None:
+    with connect() as conn:
+        c = conn.cursor()
+        try:
+            c.execute("SELECT id, title, description, filepath, filelink, active, created_at FROM tutorial WHERE id=?", (tut_id,))
+            r = c.fetchone()
+            return dict(r) if r else None
+        except Exception:
+            return None
+
+def set_tutorial_active(tut_id: int, active: int) -> bool:
+    with connect() as conn:
+        c = conn.cursor()
+        try:
+            c.execute("UPDATE tutorial SET active=? WHERE id=?", (1 if active else 0, tut_id))
+            return c.rowcount > 0
+        except Exception:
+            return False
+
+def delete_tutorial_by_id(tut_id: int) -> bool:
+    with connect() as conn:
+        c = conn.cursor()
+        try:
+            c.execute("DELETE FROM tutorial WHERE id=?", (tut_id,))
             return c.rowcount > 0
         except Exception:
             return False
