@@ -1,4 +1,5 @@
 import logging
+import os
 from datetime import datetime, timezone, timedelta
 from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, ConversationHandler, ContextTypes, CallbackQueryHandler, filters
@@ -212,7 +213,13 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "🤍 ریشه اینجاست تا همراهی فقط یک شعار نباشه؛\n"
             "هر زمان نیاز داشتی، از همین مسیرها با ما در ارتباط باش."
         )
-        await update.message.reply_text(msg, reply_markup=CONTACT_MENU)
+        base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+        img_path = os.path.join(base_dir, "files", "images", "contactRisheh.jpg")
+        try:
+            with open(img_path, "rb") as f:
+                await update.message.reply_photo(photo=f, caption=msg, reply_markup=CONTACT_MENU)
+        except Exception:
+            await update.message.reply_text(msg, reply_markup=CONTACT_MENU)
         return ConversationHandler.END
     if text in ("🚀 شروع همراهی 🚀", "🚀 شروع همیاری 🚀"):
         get_or_create_user(user.id, user.username, user.first_name, user.last_name)
@@ -245,14 +252,6 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "و اطلاع‌رسانی خدمات جدید رو منتشر می‌کنیم ✨\n"
             "اگه دوست داری در جریان باشی 🔔 و ریشه رو بیرون از بات هم دنبال کنی،\n"
             "از اینجا وارد سوشال ریشه شو 👇\n\n"
-            "📲 کانال تلگرام ریشه:\n"
-            "لینک\n"
-            "📸 صفحه اینستاگرام ریشه:\n"
-            "لینک\n"
-            "🎥 صفحه یوتیوب ریشه:\n"
-            "لینک\n"
-            "💼 صفحه لینکدین ریشه:\n"
-            "لینک"
         )
         buttons = []
         if (SOCIAL_TELEGRAM_URL or "").strip():
