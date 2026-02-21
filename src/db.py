@@ -266,7 +266,6 @@ def init_db():
             ),
         )
         defaults = [
-            ("🚨 تماس اضطراری 🚨", "▫️ارتباط در شرایط بحرانی با عزیزان و خانوده▫️", 1),
             ("🔻 سلامت پیشگیرانه 🔻", "برای اینکه از حال و وضعیت سلامت عزیزت بی‌خبر نمونی. با یک اقدام ساده، آگاهانه‌تر تصمیم بگیر. همین‌جا شروع کن.", 2),
             ("🔻 ساخت لحظه‌های به‌یاد ماندنی از راه‌دور🔻", "وقتی نمی‌تونی کنارشان باشی، می‌تونی لحظه بسازی.از سورپرایز تا مهمان‌کردن، تجربه رو بسپار به ریشه.", 3),
             ("🔻 انجام نیازهای روزمره🔻", "کارهایی که حضورت رو می‌خوان، اما از دوری.خرید و هماهنگی‌ها رو ثبت کن تا ما پیگیری کنیم.", 4),
@@ -276,6 +275,11 @@ def init_db():
                 "INSERT INTO categories (title, description, position) SELECT ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM categories WHERE title=?)",
                 (t, d, p, t),
             )
+        # Deactivate legacy "Emergency" category if it exists
+        try:
+            c.execute("UPDATE categories SET active=0 WHERE title IN (?, ?)", ("🚨 تماس اضطراری 🚨", "تماس اضطراری"))
+        except Exception:
+            pass
 
         items_by_category: dict[str, list[tuple[str, str]]] = {
             " سلامت پیشگیرانه": [
