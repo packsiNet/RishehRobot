@@ -426,12 +426,7 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if items:
             buttons = [[InlineKeyboardButton(i["title"], callback_data=f"item:{i['id']}")] for i in items]
             cat_id = (selected["id"] if selected else (cat["id"] if cat else None))
-            try:
-                norm_title = _norm_fa(cat.get("title") if cat else "")
-            except Exception:
-                norm_title = ""
-            allowed = {"سلامت پیشگیرانه", "ساخت لحظه‌های به‌یاد ماندنی از راه‌دور", "انجام نیازهای روزمره"}
-            if cat_id is not None and norm_title in allowed:
+            if cat_id is not None:
                 buttons.append([InlineKeyboardButton("اونیکه میخوام نیست", callback_data=f"customreq:{cat_id}")])
             inline_kb = InlineKeyboardMarkup(buttons)
             msg = cat["description"] if (cat and cat.get("description")) else "لطفاً یک مورد را انتخاب کن."
