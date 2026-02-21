@@ -387,6 +387,20 @@ def init_db():
 برای اطلاع از نحوه سفارش و اینکه همراهی در خدمات دیجیتال چطور انجام میشه، حتما ویدیو/ فایل بالا رو نگاه کن 🎥📎
 """,
                 ),
+                (
+                    "🚨 تماس اضطراری 🚨",
+                    """
+وقت‌هایی که مسیرهای ارتباطی با ایران دچار اختلال می‌شه 📵 و هیچ راهی برای باخبر شدن از خانواده نداری،
+در چنین شرایطی، ریشه تلاش می‌کنه پلی باشه بین تو و عزیزانت 🤍
+تا در حد توان، حال خانواده‌ت رو پیگیری کنه و نگذاره بی‌خبر بمونی.
+این خدمت کاملاً دلی و رایگانه 🌿
+در دوره‌هایی که ارتباطات محدود شد، ریشه با کمک هموطن‌های با‌معرفت در مناطق مرزی 🇮🇷 و با استفاده از رومینگ‌های در دسترس 📡، تلاش کرد صدای خانواده‌ها رو به هم برسونه.
+در حال حاضر با پایدار بودن شرایط ارتباطی ✅، این سرویس غیرفعاله؛
+اما اگر اختلالی ایجاد بشه، سریع دوباره فعالش می‌کنیم 🔄 تا نذاریم بی‌خبر بمونی.
+🤍 همراهی، فقط برای روزهای راحت نیست.
+
+""",
+                ),
             ],
         }
 
@@ -1506,6 +1520,36 @@ def get_items_by_category_title(title: str):
             (cat_id,),
         )
         return [dict(r) for r in c.fetchall()]
+
+def get_request_count_by_category(category_id: int) -> int:
+    with connect() as conn:
+        c = conn.cursor()
+        try:
+            c.execute("SELECT COUNT(1) AS cnt FROM requestuser WHERE categoryid=?", (category_id,))
+            r = c.fetchone()
+            return int(r["cnt"] or 0)
+        except Exception:
+            return 0
+
+def get_requests_by_category_admin(category_id: int):
+    with connect() as conn:
+        c = conn.cursor()
+        try:
+            c.execute(
+                """
+                SELECT r.id, r.userid, u.username, u.firstname, u.lastname,
+                       r.description, r.statusid, s.title AS status, r.created_at
+                FROM requestuser r
+                JOIN users u ON u.id=r.userid
+                LEFT JOIN orderstatus s ON s.id=r.statusid
+                WHERE r.categoryid=?
+                ORDER BY r.id DESC
+                """,
+                (category_id,)
+            )
+            return [dict(r) for r in c.fetchall()]
+        except Exception:
+            return []
 
 def create_user_request(telegram_id: int, description: str, category_id: int | None = None) -> int | None:
     with connect() as conn:

@@ -47,6 +47,8 @@ from .db import (
     get_admin_telegram_ids,
     ensure_default_items,
     create_user_request,
+    get_request_count_by_category,
+    get_requests_by_category_admin,
 )
 
 STATE_ASK_QUESTION = 1
@@ -415,9 +417,15 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if items:
             ids = [i["id"] for i in items]
             counts = get_unfinished_counts_for_item_ids(ids)
-            inline_kb = InlineKeyboardMarkup(
-                [[InlineKeyboardButton(f"{i['title']} ({counts.get(i['id'], 0)})", callback_data=f"adminorders:{i['id']}")] for i in items]
-            )
+            rows = [[InlineKeyboardButton(f"{i['title']} ({counts.get(i['id'], 0)})", callback_data=f"adminorders:{i['id']}")] for i in items]
+            try:
+                cat_id = (selected["id"] if selected else (cat["id"] if cat else None))
+            except Exception:
+                cat_id = None
+            if cat_id is not None:
+                rc = get_request_count_by_category(cat_id)
+                rows.append([InlineKeyboardButton(f"درخواست های شخصی کاربران ({rc})", callback_data=f"adminreqs:{cat_id}")])
+            inline_kb = InlineKeyboardMarkup(rows)
             await update.message.reply_text("آیتم را انتخاب کن:", reply_markup=inline_kb)
             return ConversationHandler.END
         await update.message.reply_text("آیتم فعالی در این دسته نیست.", reply_markup=KB_ADMIN)
@@ -543,7 +551,7 @@ def build_app():
     app.add_handler(CommandHandler("menu", menu))
     app.add_handler(CommandHandler("setcontent", setcontent))
     app.add_handler(CommandHandler("addorder", addorder))
-    app.add_handler(CallbackQueryHandler(on_item_callback, pattern=r"^(item:\d+|order:\d+|back:cat:\d+|orderinfo:\d+|ordercancel:\d+|adminorders:\d+|adminorderinfo:\d+:\d+|adminstatus:\d+:\d+|adminstatusset:\d+:\d+|adminuser:\d+|adminuserrole:\d+|adminuserblock:\d+|adminusers|customreq:\d+)$"))
+    app.add_handler(CallbackQueryHandler(on_item_callback, pattern=r"^(item:\d+|order:\d+|back:cat:\d+|orderinfo:\d+|ordercancel:\d+|adminorders:\d+|adminorderinfo:\d+:\d+|adminstatus:\d+:\d+|adminstatusset:\d+:\d+|adminuser:\d+|adminuserrole:\d+|adminuserblock:\d+|adminusers|customreq:\d+|adminreqs:\d+|adminreqinfo:\d+:\d+)$"))
     conv = ConversationHandler(
         entry_points=[MessageHandler(filters.TEXT & ~filters.COMMAND, handle_menu)],
         states={
@@ -567,6 +575,53 @@ async def on_item_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         context.user_data["awaiting_custom_request"] = cid
         await query.message.reply_text("لطفاً درخواستت رو کامل و دقیق بنویس و ارسال کن ✍️")
+        return
+    if data.startswith("adminreqs:"):
+        try:
+            cid = int(data.split(":", 1)[1])
+        except Exception:
+            return
+        reqs = get_requests_by_category_admin(cid)
+        if not reqs:
+            await query.message.reply_text("درخواستی برای این دسته ثبت نشده.")
+            return
+        def label(r):
+            uname = r.get("username") or ""
+            if uname:
+                base = f"@{uname}"
+            else:
+                fn = (r.get("firstname") or "").strip()
+                ln = (r.get("lastname") or "").strip()
+                base = (fn + " " + ln).strip() or "کاربر"
+            desc = (r.get("description") or "").strip().split("\n")[0]
+            if len(desc) > 20:
+                desc = desc[:20] + "…"
+            st = (r.get("status") or "").strip()
+            return f"{base} — {desc} ({st})"
+        kb = InlineKeyboardMarkup(
+            [[InlineKeyboardButton(label(r), callback_data=f"adminreqinfo:{r['id']}:{cid}")] for r in reqs[:50]]
+        )
+        await query.message.reply_text("درخواست را انتخاب کن:", reply_markup=kb)
+        return
+    if data.startswith("adminreqinfo:"):
+        try:
+            _, rid, cid = data.split(":", 2)
+            rid = int(rid); cid = int(cid)
+        except Exception:
+            return
+        # ساده: برای این نسخه، متن درخواست در همان لیست کافی است؛
+        # در صورت نیاز می‌توان جزئیات بیشتر را اضافه کرد.
+        reqs = get_requests_by_category_admin(cid)
+        r = next((x for x in reqs if x.get("id") == rid), None)
+        if not r:
+            await query.message.reply_text("درخواست یافت نشد.")
+            return
+        uname = r.get("username") or ""
+        name = f"@{uname}" if uname else ((r.get("firstname") or "") + " " + (r.get("lastname") or "")).strip() or "کاربر"
+        st = r.get("status") or ""
+        msg = f"درخواست #{r['id']}\nکاربر: {name}\nوضعیت: {st}\n\nمتن:\n{r.get('description') or ''}"
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ بازگشت", callback_data=f"adminreqs:{cid}")]])
+        await query.message.reply_text(msg, reply_markup=kb)
         return
     if data.startswith("orderinfo:"):
         try:
