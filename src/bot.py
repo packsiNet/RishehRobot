@@ -397,43 +397,43 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             break
     cat = selected or get_category_by_title(text)
     items = get_items_by_category(selected["id"]) if selected else get_items_by_category_title(text)
-        if is_admin(user.id):
-            if items:
-                ids = [i["id"] for i in items]
-                counts = get_unfinished_counts_for_item_ids(ids)
-                inline_kb = InlineKeyboardMarkup(
-                    [[InlineKeyboardButton(f"{i['title']} ({counts.get(i['id'], 0)})", callback_data=f"adminorders:{i['id']}")] for i in items]
-                )
-                await update.message.reply_text("آیتم را انتخاب کن:", reply_markup=inline_kb)
-                return ConversationHandler.END
-            await update.message.reply_text("آیتم فعالی در این دسته نیست.", reply_markup=KB_ADMIN)
+    if is_admin(user.id):
+        if items:
+            ids = [i["id"] for i in items]
+            counts = get_unfinished_counts_for_item_ids(ids)
+            inline_kb = InlineKeyboardMarkup(
+                [[InlineKeyboardButton(f"{i['title']} ({counts.get(i['id'], 0)})", callback_data=f"adminorders:{i['id']}")] for i in items]
+            )
+            await update.message.reply_text("آیتم را انتخاب کن:", reply_markup=inline_kb)
             return ConversationHandler.END
-        else:
-            if items:
-                inline_kb = InlineKeyboardMarkup(
-                    [[InlineKeyboardButton(i["title"], callback_data=f"item:{i['id']}")] for i in items]
-                )
-                msg = cat["description"] if (cat and cat.get("description")) else "لطفاً یک مورد را انتخاب کن."
-                await update.message.reply_text(msg, reply_markup=inline_kb)
-                return ConversationHandler.END
-            if cat and cat.get("description"):
-                rows = []
-                emergency = "🚨 تماس اضطراری 🚨"
-                has_emergency = False
-                for c in cats:
-                    t = c.get("title") or ""
-                    if t == emergency:
-                        has_emergency = True
-                        continue
-                    rows.append([t])
-                if has_emergency:
-                    rows.append([emergency, "🎥 آموزش تصویری"])
-                else:
-                    rows.append(["🎥 آموزش تصویری"])
-                rows.append([BACK_TEXT])
-                kb = ReplyKeyboardMarkup(rows, resize_keyboard=True, is_persistent=True)
-                await update.message.reply_text(cat["description"], reply_markup=kb)
-                return ConversationHandler.END
+        await update.message.reply_text("آیتم فعالی در این دسته نیست.", reply_markup=KB_ADMIN)
+        return ConversationHandler.END
+    else:
+        if items:
+            inline_kb = InlineKeyboardMarkup(
+                [[InlineKeyboardButton(i["title"], callback_data=f"item:{i['id']}")] for i in items]
+            )
+            msg = cat["description"] if (cat and cat.get("description")) else "لطفاً یک مورد را انتخاب کن."
+            await update.message.reply_text(msg, reply_markup=inline_kb)
+            return ConversationHandler.END
+        if cat and cat.get("description"):
+            rows = []
+            emergency = "🚨 تماس اضطراری 🚨"
+            has_emergency = False
+            for c in cats:
+                t = c.get("title") or ""
+                if t == emergency:
+                    has_emergency = True
+                    continue
+                rows.append([t])
+            if has_emergency:
+                rows.append([emergency, "🎥 آموزش تصویری"])
+            else:
+                rows.append(["🎥 آموزش تصویری"])
+            rows.append([BACK_TEXT])
+            kb = ReplyKeyboardMarkup(rows, resize_keyboard=True, is_persistent=True)
+            await update.message.reply_text(cat["description"], reply_markup=kb)
+            return ConversationHandler.END
     item = get_item_by_title(text)
     if item:
         same_items = get_items_by_category_title(item["category_title"]) or []
