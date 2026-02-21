@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime, timezone, timedelta
-from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardRemove
+from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, ConversationHandler, ContextTypes, CallbackQueryHandler, filters
 try:
     from zoneinfo import ZoneInfo
@@ -60,7 +60,6 @@ ADMIN_MAIN_BUTTONS = [
     ["🧰 مدیریت خدمات"],
     ["🎓 مدیریت بخش آموزش"],
     ["👥 مدیریت کاربران"],
-    ["🌿 ارتباط با ریشه "],
 ]
 KB_USER = ReplyKeyboardMarkup(MAIN_BUTTONS, resize_keyboard=True, is_persistent=True)
 KB_ADMIN = ReplyKeyboardMarkup(ADMIN_MAIN_BUTTONS, resize_keyboard=True, is_persistent=True)
@@ -408,11 +407,6 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("منوی اصلی نمایش داده شد.", reply_markup=(KB_ADMIN if is_admin(user.id) else KB_USER))
 
 
-async def refreshkb(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    await update.message.reply_text("...", reply_markup=ReplyKeyboardRemove())
-    await update.message.reply_text("منوی اصلی به‌روزرسانی شد.", reply_markup=(KB_ADMIN if is_admin(user.id) else KB_USER))
-
 async def receive_question(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.message.text.strip()
     user = update.effective_user
@@ -487,7 +481,6 @@ def build_app():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("health", health))
     app.add_handler(CommandHandler("menu", menu))
-    app.add_handler(CommandHandler("refreshkb", refreshkb))
     app.add_handler(CommandHandler("setcontent", setcontent))
     app.add_handler(CommandHandler("addorder", addorder))
     app.add_handler(CallbackQueryHandler(on_item_callback, pattern=r"^(item:\d+|order:\d+|back:cat:\d+|orderinfo:\d+|ordercancel:\d+|adminorders:\d+|adminorderinfo:\d+:\d+|adminstatus:\d+:\d+|adminstatusset:\d+:\d+|adminuser:\d+|adminuserrole:\d+|adminuserblock:\d+|adminusers)$"))
