@@ -24,5 +24,5 @@ SUPPORT_URL = os.getenv("SUPPORT_URL", "https://t.me/rishehsupport")
 
 # Mandatory channel membership configuration
 MANDATORY_CHANNEL_ID = os.getenv("MANDATORY_CHANNEL_ID", "").strip() if os.getenv("MANDATORY_CHANNEL_ID") else ""
-MANDATORY_CHANNEL_USERNAME = os.getenv("MANDATORY_CHANNEL_USERNAME", "").strip() if os.getenv("MANDATORY_CHANNEL_USERNAME") else ""
-MANDATORY_CHANNEL_URL = os.getenv("MANDATORY_CHANNEL_URL", "https://t.me/rishehapp").strip()
+MANDATORY_CHANNEL_USERNAME = (os.getenv("MANDATORY_CHANNEL_USERNAME") or "@rishehapp").strip()
+MANDATORY_CHANNEL_URL = (os.getenv("MANDATORY_CHANNEL_URL") or "https://t.me/rishehapp").strip()

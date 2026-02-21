@@ -156,6 +156,7 @@ def _mandatory_channel_id_or_username() -> str | int | None:
 async def _is_member(bot, user_id: int) -> bool:
     channel = _mandatory_channel_id_or_username()
     if not channel:
+        # اگر کانال تنظیم نشده، به‌صورت پیش‌فرض کاربر عضو در نظر گرفته می‌شود
         return True
     try:
         m = await bot.get_chat_member(chat_id=channel, user_id=user_id)
