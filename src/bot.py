@@ -232,15 +232,17 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         if cats:
             rows = []
-            added_edu = False
+            emergency = "🚨 تماس اضطراری 🚨"
+            has_emergency = False
             for c in cats:
                 t = c.get("title") or ""
-                if t == "🚨 تماس اضطراری 🚨":
-                    rows.append([t, "🎥 آموزش تصویری"])
-                    added_edu = True
-                else:
-                    rows.append([t])
-            if not added_edu:
+                if t == emergency:
+                    has_emergency = True
+                    continue
+                rows.append([t])
+            if has_emergency:
+                rows.append([emergency, "🎥 آموزش تصویری"])
+            else:
                 rows.append(["🎥 آموزش تصویری"])
             rows.append([BACK_TEXT])
             kb = ReplyKeyboardMarkup(rows, resize_keyboard=True, is_persistent=True)
@@ -399,15 +401,17 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return ConversationHandler.END
             if cat and cat.get("description"):
                 rows = []
-                added_edu = False
+                emergency = "🚨 تماس اضطراری 🚨"
+                has_emergency = False
                 for c in cats:
                     t = c.get("title") or ""
-                    if t == "🚨 تماس اضطراری 🚨":
-                        rows.append([t, "🎥 آموزش تصویری"])
-                        added_edu = True
-                    else:
-                        rows.append([t])
-                if not added_edu:
+                    if t == emergency:
+                        has_emergency = True
+                        continue
+                    rows.append([t])
+                if has_emergency:
+                    rows.append([emergency, "🎥 آموزش تصویری"])
+                else:
                     rows.append(["🎥 آموزش تصویری"])
                 rows.append([BACK_TEXT])
                 kb = ReplyKeyboardMarkup(rows, resize_keyboard=True, is_persistent=True)
