@@ -7,7 +7,7 @@ try:
     TEHRAN_TZ = ZoneInfo("Asia/Tehran")
 except Exception:
     TEHRAN_TZ = None
-from .config import TELEGRAM_BOT_TOKEN, ADMIN_USER_IDS, APP_URL
+from .config import TELEGRAM_BOT_TOKEN, ADMIN_USER_IDS, APP_URL, SOCIAL_TELEGRAM_URL, SOCIAL_INSTAGRAM_URL, SOCIAL_YOUTUBE_URL, SOCIAL_LINKEDIN_URL, WEBSITE_URL, SUPPORT_URL
 from .db import (
     init_db,
     get_or_create_user,
@@ -53,6 +53,7 @@ MAIN_BUTTONS = [
     ["🔎 چطور به ریشه اعتماد کنم؟ 🔎"],
     ["💬 اگه نمی‌دونی؛ از من بپرس! 💬"],
     ["🎥 آموزش تصویری"],
+    ["🌿 ارتباط با ریشه "],
 ]
 ADMIN_MAIN_BUTTONS = [
     ["📦 لیست سفارشات"],
@@ -68,6 +69,17 @@ ORDER_MENU = ReplyKeyboardMarkup(
         ["📊 اعلام وضعیت سفارش‌ها"],
         ["⏳ سفارش‌های درحال انجام"],
         ["✅ سفارش‌های تکمیل شده"],
+        [BACK_TEXT],
+    ],
+    resize_keyboard=True,
+    is_persistent=True,
+)
+
+CONTACT_MENU = ReplyKeyboardMarkup(
+    [
+        ["📱 سوشال ریشه 📱"],
+        ["🌐 وبسایت ریشه🌐"],
+        ["💬 ادمین ریشه💬"],
         [BACK_TEXT],
     ],
     resize_keyboard=True,
@@ -125,7 +137,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "اکانت شما فعال نیست. برای فعال‌سازی با پشتیبانی تماس بگیرید."
         )
         inline_kb = InlineKeyboardMarkup(
-            [[InlineKeyboardButton(" ارتباط با پشتیبانی", url="https://t.me/rishehsupport")]]
+            [[InlineKeyboardButton(" ارتباط با پشتیبانی", url=SUPPORT_URL)]]
         )
         await update.message.reply_text(support_msg, reply_markup=inline_kb)
         return
@@ -134,12 +146,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         kb = KB_ADMIN
     else:
         welcome_msg = (
-            "🌿 ریشه؛ جایی برای اینکه حتی از دور هم کنار خانواده‌ت باشی\n"
-            "ریشه برای وقت‌هایی شکل گرفت که از خونه دوری، 🏠\n"
-            "اما نمی‌خوای فاصله باعث بشه از مراقبت و پیگیری جا بمونی. 🤍\n"
+            "🌿 ریشه؛ جایی برای اینکه حتی از دور هم کنار خانواده‌ت باشی\n\n"
+            "🏠 ریشه برای وقت‌هایی شکل گرفت که از خونه دوری،\n"
+            "اما نمی‌خوای فاصله باعث بشه از مراقبت و پیگیری جا بمونی. 🤍\n\n"
             "برای اینکه از وضعیت سلامت عزیزت باخبر باشی، 🩺\n"
-            "نیازهاشون رو مدیریت کنی و با خیال راحت‌تری زندگی کنی. 🕊️\n"
-            "اینجا خدمات سلامت، همراهی و کارهای روزمره خانواده تو یک ساختار یکپارچه کنار هم قرار گرفته 🔗\n"
+            "نیازهاشون رو مدیریت کنی و با خیال راحت‌تری زندگی کنی. 🕊️\n\n"
+            "اینجا خدمات سلامت، همراهی و کارهای روزمره خانواده تو یک ساختار یکپارچه کنار هم قرار گرفته 🔗\n\n"
             "تا بتونی با آگاهی بیشتر و دغدغه کمتر کنارشون بمونی. 🌱\n"
             "اگه آماده‌ای این همراهی رو شروع کنی، قدم اول رو تو بردار. 👣\n"
             "✨ از منو یکی از مسیرها رو انتخاب کن تا با هم جلو بریم."
@@ -186,6 +198,22 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if text == BACK_TEXT:
         await update.message.reply_text("بازگشت به منوی اصلی.", reply_markup=(KB_ADMIN if is_admin(user.id) else KB_USER))
         return ConversationHandler.END
+    if text == "🌿 ارتباط با ریشه ":
+        msg = (
+            "اگه می‌خوای بیشتر با ریشه در ارتباط باشی، چند راه ساده پیش‌روته 👇\n"
+            "📲 دنبال کردن صفحات مجازی ریشه\n"
+            "توی شبکه‌های اجتماعی ریشه می‌تونی از آخرین خدمات، اطلاعیه‌ها، به‌روزرسانی‌ها و محتوای آموزشی باخبر بشی.\n"
+            "کافیه روی لینک هر شبکه کلیک کنی و صفحه رو دنبال کنی تا همیشه در جریان باشی 🔔\n"
+            "\n"
+            "💬 ارتباط مستقیم با پشتیبانی\n"
+            "اگه سؤال داری یا نیاز به راهنمایی بیشتری داری، می‌تونی مستقیم به پشتیبانی پیام بدی ✍️ یا ویس بفرستی 🎙️\n"
+            "پیامت بررسی می‌شه و در سریع‌ترین زمان ممکن پاسخ می‌گیری ⏳\n"
+            "\n"
+            "🤍 ریشه اینجاست تا همراهی فقط یک شعار نباشه؛\n"
+            "هر زمان نیاز داشتی، از همین مسیرها با ما در ارتباط باش."
+        )
+        await update.message.reply_text(msg, reply_markup=CONTACT_MENU)
+        return ConversationHandler.END
     if text in ("🚀 شروع همراهی 🚀", "🚀 شروع همیاری 🚀"):
         get_or_create_user(user.id, user.username, user.first_name, user.last_name)
         cats = get_categories_active()
@@ -209,6 +237,62 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "اینجا می‌تونی وضعیتش رو ببینی 👀"
         )
         await update.message.reply_text(msg, reply_markup=ORDER_MENU)
+        return ConversationHandler.END
+    if text == "📱 سوشال ریشه 📱":
+        msg = (
+            "🌿 می‌خوای بیشتر با ریشه آشنا شی؟\n"
+            "توی شبکه‌های اجتماعی ریشه، روایت‌های واقعی از خانواده‌ها 🤍\n"
+            "و اطلاع‌رسانی خدمات جدید رو منتشر می‌کنیم ✨\n"
+            "اگه دوست داری در جریان باشی 🔔 و ریشه رو بیرون از بات هم دنبال کنی،\n"
+            "از اینجا وارد سوشال ریشه شو 👇\n\n"
+            "📲 کانال تلگرام ریشه:\n"
+            "لینک\n"
+            "📸 صفحه اینستاگرام ریشه:\n"
+            "لینک\n"
+            "🎥 صفحه یوتیوب ریشه:\n"
+            "لینک\n"
+            "💼 صفحه لینکدین ریشه:\n"
+            "لینک"
+        )
+        buttons = []
+        if (SOCIAL_TELEGRAM_URL or "").strip():
+            buttons.append([InlineKeyboardButton("کانال تلگرام ریشه", url=SOCIAL_TELEGRAM_URL)])
+        if (SOCIAL_INSTAGRAM_URL or "").strip():
+            buttons.append([InlineKeyboardButton("صفحه اینستاگرام ریشه", url=SOCIAL_INSTAGRAM_URL)])
+        if (SOCIAL_YOUTUBE_URL or "").strip():
+            buttons.append([InlineKeyboardButton("صفحه یوتیوب ریشه", url=SOCIAL_YOUTUBE_URL)])
+        if (SOCIAL_LINKEDIN_URL or "").strip():
+            buttons.append([InlineKeyboardButton("صفحه لینکدین ریشه", url=SOCIAL_LINKEDIN_URL)])
+        inline_kb = InlineKeyboardMarkup(buttons) if buttons else None
+        await update.message.reply_text(msg, reply_markup=inline_kb or CONTACT_MENU)
+        return ConversationHandler.END
+    if text == "🌐 وبسایت ریشه🌐":
+        msg = (
+            "اگه می‌خوای کامل‌تر با خدمات و ساختار ریشه آشنا شی،\n"
+            "پیشنهاد می‌کنیم یه سر به وبسایت بزنی 👀\n"
+            "توی سایت می‌تونی جزئیات هر خدمت رو دقیق ببینی 📄،\n"
+            "فرآیندها رو بخونی 🔎،\n"
+            "سؤال‌های متداول رو بررسی کنی ❓\n"
+            "و با خیال راحت تصمیم بگیری 🤍\n"
+            "🌍 لینک وبسایت خارجی ریشه:\n"
+            "لینک"
+        )
+        inline_kb = InlineKeyboardMarkup([[InlineKeyboardButton("وبسایت ریشه", url=WEBSITE_URL)]]) if (WEBSITE_URL or "").strip() else None
+        await update.message.reply_text(msg, reply_markup=inline_kb or CONTACT_MENU)
+        return ConversationHandler.END
+    if text == "💬 ادمین ریشه💬":
+        msg = (
+            "💬 اگه درباره خدمات، ثبت سفارش یا هر بخش دیگه‌ای سؤال داری،\n"
+            "برای این آیدی بنویس ✍️ یا ویس بفرست 🎙️\n"
+            "پیامت مستقیم برای تیم پشتیبانی ریشه ارسال می‌شه 📩\n"
+            "و کارشناسانمون در سریع‌ترین زمان ممکن بررسیش می‌کنن ⏳\n"
+            "تا بتونیم به بهترین شکل ممکن راهنماییت کنیم 🤍\n"
+            "کنارت هستیم.\n\n"
+            "🆔 آیدی پشتیبانی:\n"
+            "@rishehsupport"
+        )
+        inline_kb = InlineKeyboardMarkup([[InlineKeyboardButton(" ارتباط با پشتیبانی", url=SUPPORT_URL)]])
+        await update.message.reply_text(msg, reply_markup=inline_kb)
         return ConversationHandler.END
     if text == "🛠 پنل ادمین":
         if not is_admin(user.id):
@@ -270,7 +354,7 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "@rishehsupport"
         )
         inline_kb = InlineKeyboardMarkup(
-            [[InlineKeyboardButton(" ارتباط با پشتیبانی", url="https://t.me/rishehsupport")]]
+            [[InlineKeyboardButton(" ارتباط با پشتیبانی", url=SUPPORT_URL)]]
         )
         await update.message.reply_text(support_msg, reply_markup=inline_kb)
         return ConversationHandler.END
