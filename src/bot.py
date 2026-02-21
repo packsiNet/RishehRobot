@@ -53,7 +53,6 @@ MAIN_BUTTONS = [
     ["📌 پیگیری سفارشاتم 📌"],
     ["🔎 چطور به ریشه اعتماد کنم؟ 🔎"],
     ["💬 اگه نمی‌دونی؛ از من بپرس! 💬"],
-    ["🎥 آموزش تصویری"],
     ["🌿 ارتباط با ریشه"],
 ]
 ADMIN_MAIN_BUTTONS = [
@@ -232,7 +231,8 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "برای اطلاعات بیشتر از هر سرویس، می‌تونی روی هرکدوم کلیک کنی تا توضیحات کامل برات ارسال بشه ✨"
         )
         if cats:
-            kb = ReplyKeyboardMarkup([[c["title"]] for c in cats] + [[BACK_TEXT]], resize_keyboard=True, is_persistent=True)
+            rows = [[c["title"]] for c in cats] + [["🎥 آموزش تصویری"], [BACK_TEXT]]
+            kb = ReplyKeyboardMarkup(rows, resize_keyboard=True, is_persistent=True)
             await update.message.reply_text(msg, reply_markup=kb)
         else:
             await update.message.reply_text(msg, reply_markup=(KB_ADMIN if is_admin(user.id) else KB_USER))
@@ -387,7 +387,8 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text(msg, reply_markup=inline_kb)
                 return ConversationHandler.END
             if cat and cat.get("description"):
-                kb = ReplyKeyboardMarkup([[c["title"]] for c in cats] + [[BACK_TEXT]], resize_keyboard=True, is_persistent=True)
+                rows = [[c["title"]] for c in cats] + [["🎥 آموزش تصویری"], [BACK_TEXT]]
+                kb = ReplyKeyboardMarkup(rows, resize_keyboard=True, is_persistent=True)
                 await update.message.reply_text(cat["description"], reply_markup=kb)
                 return ConversationHandler.END
     item = get_item_by_title(text)
