@@ -179,7 +179,7 @@ def _force_join_kb(item_id: int) -> InlineKeyboardMarkup:
     ]
     return InlineKeyboardMarkup(buttons)
 
-async def notify_admins(context: ContextTypes.DEFAULT_TYPE, text: str) -> int:
+async def notify_admins(context: ContextTypes.DEFAULT_TYPE, text: str, reply_markup: InlineKeyboardMarkup | None = None) -> int:
     ids = _resolve_admin_ids()
     if not ids:
         logger.warning("no admin recipients to notify")
@@ -187,7 +187,7 @@ async def notify_admins(context: ContextTypes.DEFAULT_TYPE, text: str) -> int:
     ok = 0
     for aid in ids:
         try:
-            await context.bot.send_message(chat_id=aid, text=text)
+            await context.bot.send_message(chat_id=aid, text=text, reply_markup=reply_markup)
             ok += 1
         except Exception as e:
             logger.warning("notify admin %s failed: %s", aid, e)
@@ -1087,8 +1087,18 @@ async def on_item_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"تاریخ ثبت: {j}\n\n"
             f"آخرین وضعیت: {info.get('status') or ''}\n\n"
         )
+        contact_url = None
+        uname = (info.get("username") or "").strip()
+        tid = info.get("telegramid") or info.get("telegram_id")
+        if uname:
+            contact_url = f"https://t.me/{uname}"
+        elif tid:
+            contact_url = f"tg://user?id={tid}"
+        first_row = [InlineKeyboardButton("تغییر وضعیت", callback_data=f"adminstatus:{oid}:{iid}")]
+        if contact_url:
+            first_row.append(InlineKeyboardButton("ارتباط با کاربر", url=contact_url))
         kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("تغییر وضعیت", callback_data=f"adminstatus:{oid}:{iid}")],
+            first_row,
             [InlineKeyboardButton("⬅️ بازگشت", callback_data=f"adminorders:{iid}")],
         ])
         await query.message.reply_text(msg, reply_markup=kb)
@@ -1249,7 +1259,8 @@ async def on_item_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             j = to_jalali_str(ts) if ts else ""
             name = (user.first_name or "").strip() or (f"@{user.username}" if user.username else "کاربر")
             msg = f"سفارش جدید\nکاربر: {name}\nعنوان: {item['title']}\nتاریخ: {j}"
-            await notify_admins(context, msg)
+            manage_kb = InlineKeyboardMarkup([[InlineKeyboardButton("مدیریت سفارش", callback_data=f"adminorderinfo:{oid}:{item['id']}")]]) if (oid and item) else None
+            await notify_admins(context, msg, reply_markup=manage_kb)
         except Exception as e:
             logger.warning("notify admins on new order failed: %s", e)
         return
@@ -1280,7 +1291,8 @@ async def on_item_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             j = to_jalali_str(ts) if ts else ""
             name = (user.first_name or "").strip() or (f"@{user.username}" if user.username else "کاربر")
             msg = f"سفارش جدید\nکاربر: {name}\nعنوان: {item['title']}\nتاریخ: {j}"
-            await notify_admins(context, msg)
+            manage_kb = InlineKeyboardMarkup([[InlineKeyboardButton("مدیریت سفارش", callback_data=f"adminorderinfo:{oid}:{item['id']}")]]) if (oid and item) else None
+            await notify_admins(context, msg, reply_markup=manage_kb)
         except Exception as e:
             logger.warning("notify admins on new order failed: %s", e)
         return
