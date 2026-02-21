@@ -2,6 +2,7 @@ import logging
 import os
 from datetime import datetime, timezone, timedelta
 from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton
+from telegram.constants import ChatMemberStatus
 from telegram.ext import Application, CommandHandler, MessageHandler, ConversationHandler, ContextTypes, CallbackQueryHandler, filters
 try:
     from zoneinfo import ZoneInfo
@@ -135,6 +136,40 @@ def _resolve_admin_ids():
                 out.append(xi)
         logger.info("admin recipients resolved count=%d ids=%s", len(out), out)
         return out
+
+def _mandatory_channel_id_or_username() -> str | None:
+    cid = os.getenv("MANDATORY_CHANNEL_ID")
+    if cid and cid.strip():
+        return cid.strip()
+    uname = os.getenv("MANDATORY_CHANNEL_USERNAME")
+    if uname and uname.strip():
+        return uname.strip()
+    return None
+
+async def _is_member(bot, user_id: int) -> bool:
+    channel = _mandatory_channel_id_or_username()
+    if not channel:
+        return True
+    try:
+        m = await bot.get_chat_member(chat_id=channel, user_id=user_id)
+        # سازگاری با نسخه‌های مختلف PTB: OWNER در v20+ و CREATOR در نسخه‌های قدیمی‌تر
+        allowed = set()
+        for name in ("MEMBER", "ADMINISTRATOR", "OWNER", "CREATOR"):
+            val = getattr(ChatMemberStatus, name, None)
+            if val is not None:
+                allowed.add(val)
+        return m.status in allowed if allowed else True
+    except Exception as e:
+        logger.warning("get_chat_member failed: %s", e)
+        return False
+
+def _force_join_kb(item_id: int) -> InlineKeyboardMarkup:
+    join_url = os.getenv("MANDATORY_CHANNEL_URL", "https://t.me/+wq00h6LuLBsyOWJk")
+    buttons = [
+        [InlineKeyboardButton("📢 عضویت در کانال ریشه", url=join_url)],
+        [InlineKeyboardButton("🔔 بررسی عضویت", callback_data=f"checkchannel:{item_id}")],
+    ]
+    return InlineKeyboardMarkup(buttons)
     except Exception as e:
         logger.exception("resolve admin ids failed: %s", e)
         return list(ADMIN_USER_IDS)
@@ -703,7 +738,7 @@ def build_app():
     app.add_handler(CommandHandler("menu", menu))
     app.add_handler(CommandHandler("setcontent", setcontent))
     app.add_handler(CommandHandler("addorder", addorder))
-    app.add_handler(CallbackQueryHandler(on_item_callback, pattern=r"^(item:\d+|order:\d+|back:cat:\d+|orderinfo:\d+|ordercancel:\d+|adminorders:\d+|adminorderinfo:\d+:\d+|adminstatus:\d+:\d+|adminstatusset:\d+:\d+|adminuser:\d+|adminuserrole:\d+|adminuserblock:\d+|adminusers|customreq:\d+|adminreqs:\d+|adminreqinfo:\d+:\d+|svcitem:\d+:\d+|svcset:\d+:\d+:\d+|svcback:\d+|svcadd:\d+|tutitem:\d+|tutset:\d+:\d+|tutdel:\d+|tutback|tutadd|tutview:\d+|tutpage:\d+)$"))
+    app.add_handler(CallbackQueryHandler(on_item_callback, pattern=r"^(item:\d+|order:\d+|back:cat:\d+|orderinfo:\d+|ordercancel:\d+|adminorders:\d+|adminorderinfo:\d+:\d+|adminstatus:\d+:\d+|adminstatusset:\d+:\d+|adminuser:\d+|adminuserrole:\d+|adminuserblock:\d+|adminusers|customreq:\d+|adminreqs:\d+|adminreqinfo:\d+:\d+|svcitem:\d+:\d+|svcset:\d+:\d+:\d+|svcback:\d+|svcadd:\d+|tutitem:\d+|tutset:\d+:\d+|tutdel:\d+|tutback|tutadd|tutview:\d+|tutpage:\d+|checkchannel:\d+)$"))
     app.add_handler(MessageHandler((filters.VIDEO | filters.Document.ALL), handle_media))
     conv = ConversationHandler(
         entry_points=[MessageHandler(filters.TEXT & ~filters.COMMAND, handle_menu)],
@@ -1172,12 +1207,51 @@ async def on_item_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not item:
             return
         user = update.effective_user
+        if not await _is_member(context.bot, user.id):
+            txt = (
+                "📢 قبل از اینکه ادامه بدیم،\n"
+                "لازمه عضو کانال رسمی ریشه باشی.\n"
+                "بعد از عضویت، روی «بررسی عضویت» بزن تا ادامه بدیم."
+            )
+            await query.message.reply_text(txt, reply_markup=_force_join_kb(item_id))
+            return
         oid = create_order_for_item(user.id, item_id)
         kb = InlineKeyboardMarkup(
             [[InlineKeyboardButton("⬅️ بازگشت", callback_data=f"back:cat:{item['categoryid']}")]]
         )
         await query.message.edit_text("سفارش ثبت شد ✅")
         await query.message.edit_reply_markup(reply_markup=kb)
+        try:
+            order = get_order_by_id(oid) if oid else None
+            ts = order.get("created_at") if order else None
+            j = to_jalali_str(ts) if ts else ""
+            name = (user.first_name or "").strip() or (f"@{user.username}" if user.username else "کاربر")
+            msg = f"سفارش جدید\nکاربر: {name}\nعنوان: {item['title']}\nتاریخ: {j}"
+            await notify_admins(context, msg)
+        except Exception as e:
+            logger.warning("notify admins on new order failed: %s", e)
+        return
+    if data.startswith("checkchannel:"):
+        try:
+            item_id = int(data.split(":", 1)[1])
+        except Exception:
+            return
+        item = get_item_by_id(item_id)
+        if not item:
+            return
+        user = update.effective_user
+        if not await _is_member(context.bot, user.id):
+            txt = (
+                "هنوز عضویت تایید نشد.\n"
+                "پس از عضویت، دوباره روی «بررسی عضویت» بزن."
+            )
+            await query.message.reply_text(txt, reply_markup=_force_join_kb(item_id))
+            return
+        oid = create_order_for_item(user.id, item_id)
+        kb = InlineKeyboardMarkup(
+            [[InlineKeyboardButton("⬅️ بازگشت", callback_data=f"back:cat:{item['categoryid']}")]]
+        )
+        await query.message.reply_text("سفارش ثبت شد ✅", reply_markup=kb)
         try:
             order = get_order_by_id(oid) if oid else None
             ts = order.get("created_at") if order else None
