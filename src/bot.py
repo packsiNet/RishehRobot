@@ -29,11 +29,13 @@ from .db import (
     create_ticket,
     add_order_for_user,
     get_categories_active,
+    get_categories_all,
     get_category_by_title,
     get_items_by_category_title,
     get_items_by_category,
     get_item_by_title,
     get_item_by_id,
+    get_item_by_id_any,
     create_order_for_item,
     get_unfinished_counts_for_item_ids,
     get_orders_by_item_admin,
@@ -49,6 +51,8 @@ from .db import (
     create_user_request,
     get_request_count_by_category,
     get_requests_by_category_admin,
+    get_items_by_category_admin,
+    set_item_active,
 )
 
 STATE_ASK_QUESTION = 1
@@ -201,7 +205,11 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text("دسته‌بندی فعالی موجود نیست.", reply_markup=KB_ADMIN)
             return ConversationHandler.END
         if text == "🧰 مدیریت خدمات":
-            await update.message.reply_text("مدیریت خدمات - به‌زودی.", reply_markup=KB_ADMIN)
+            context.user_data["svc_manage"] = True
+            cats = get_categories_all()
+            rows = [[c["title"]] for c in cats] + [[BACK_TEXT]] if cats else [[BACK_TEXT]]
+            kb = ReplyKeyboardMarkup(rows, resize_keyboard=True, is_persistent=True)
+            await update.message.reply_text("یک دسته‌بندی خدمات را انتخاب کن:", reply_markup=kb)
             return ConversationHandler.END
         if text == "🎓 مدیریت بخش آموزش":
             await update.message.reply_text("مدیریت بخش آموزش - به‌زودی.", reply_markup=KB_ADMIN)
@@ -224,6 +232,7 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("یک کاربر را انتخاب کن:", reply_markup=kb)
             return ConversationHandler.END
     if text == BACK_TEXT:
+        context.user_data.pop("svc_manage", None)
         await update.message.reply_text("بازگشت به منوی اصلی.", reply_markup=(KB_ADMIN if is_admin(user.id) else KB_USER))
         return ConversationHandler.END
     if text in ("🌿 ارتباط با ریشه", "🌿 ارتباط با ریشه "):
@@ -390,6 +399,32 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         msg = value if value else "محتوای معرفی هنوز تنظیم نشده. از ادمین بخواهید /setcontent about ... را اجرا کند."
         await update.message.reply_text(msg, reply_markup=(KB_ADMIN if is_admin(user.id) else KB_USER))
         return ConversationHandler.END
+    # جریان مدیریت خدمات برای ادمین
+    if is_admin(user.id) and context.user_data.get("svc_manage"):
+        cats_all = get_categories_all()
+        norm_text = _norm_fa(text)
+        selected = None
+        for c in cats_all:
+            ct = _norm_fa(c.get("title") or "")
+            if ct == norm_text or norm_text in ct or ct in norm_text:
+                selected = c
+                break
+        if selected:
+            items_all = get_items_by_category_admin(selected["id"]) or []
+            def marker(active):
+                return "🟢" if (active or 0) != 0 else "⚪"
+            buttons = [
+                [InlineKeyboardButton(f"{marker(i['active'])} {i['title']}", callback_data=f"svcitem:{i['id']}:{selected['id']}")]
+                for i in items_all
+            ]
+            inline_kb = InlineKeyboardMarkup(buttons) if buttons else None
+            await update.message.reply_text("آیتم‌های این دسته:", reply_markup=inline_kb or KB_ADMIN)
+            return ConversationHandler.END
+        # اگر متن با هیچ دسته‌ای مطابق نبود، به منوی ادمین برگرد
+        await update.message.reply_text("از لیست دسته‌ها انتخاب کن.", reply_markup=KB_ADMIN)
+        context.user_data.pop("svc_manage", None)
+        return ConversationHandler.END
+
     cats = get_categories_active()
     norm_text = _norm_fa(text)
     selected = None
@@ -525,7 +560,7 @@ def build_app():
     app.add_handler(CommandHandler("menu", menu))
     app.add_handler(CommandHandler("setcontent", setcontent))
     app.add_handler(CommandHandler("addorder", addorder))
-    app.add_handler(CallbackQueryHandler(on_item_callback, pattern=r"^(item:\d+|order:\d+|back:cat:\d+|orderinfo:\d+|ordercancel:\d+|adminorders:\d+|adminorderinfo:\d+:\d+|adminstatus:\d+:\d+|adminstatusset:\d+:\d+|adminuser:\d+|adminuserrole:\d+|adminuserblock:\d+|adminusers|customreq:\d+|adminreqs:\d+|adminreqinfo:\d+:\d+)$"))
+    app.add_handler(CallbackQueryHandler(on_item_callback, pattern=r"^(item:\d+|order:\d+|back:cat:\d+|orderinfo:\d+|ordercancel:\d+|adminorders:\d+|adminorderinfo:\d+:\d+|adminstatus:\d+:\d+|adminstatusset:\d+:\d+|adminuser:\d+|adminuserrole:\d+|adminuserblock:\d+|adminusers|customreq:\d+|adminreqs:\d+|adminreqinfo:\d+:\d+|svcitem:\d+:\d+|svcset:\d+:\d+:\d+|svcback:\d+)$"))
     conv = ConversationHandler(
         entry_points=[MessageHandler(filters.TEXT & ~filters.COMMAND, handle_menu)],
         states={
@@ -542,6 +577,64 @@ async def on_item_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     data = query.data
+    if data.startswith("svcitem:"):
+        try:
+            _, iid, cid = data.split(":", 2)
+            iid = int(iid); cid = int(cid)
+        except Exception:
+            return
+        it = get_item_by_id_any(iid)
+        if not it:
+            await query.message.reply_text("آیتم یافت نشد.")
+            return
+        active = (it.get("active") or 0) != 0
+        toggle_label = "غیرفعال کردن" if active else "فعال کردن"
+        toggle_to = 0 if active else 1
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton(toggle_label, callback_data=f"svcset:{it['id']}:{toggle_to}:{cid}")],
+            [InlineKeyboardButton("⬅️ بازگشت", callback_data=f"svcback:{cid}")],
+        ])
+        status_txt = "فعال" if active else "غیرفعال"
+        await query.message.reply_text(f"مدیریت آیتم: {it.get('title') or ''}\nوضعیت فعلی: {status_txt}", reply_markup=kb)
+        return
+    if data.startswith("svcset:"):
+        try:
+            _, iid, val, cid = data.split(":", 3)
+            iid = int(iid); val = int(val); cid = int(cid)
+        except Exception:
+            return
+        ok = set_item_active(iid, val)
+        it = get_item_by_id_any(iid)
+        active = (it.get("active") or 0) != 0 if it else (val != 0)
+        toggle_label = "غیرفعال کردن" if active else "فعال کردن"
+        toggle_to = 0 if active else 1
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton(toggle_label, callback_data=f"svcset:{iid}:{toggle_to}:{cid}")],
+            [InlineKeyboardButton("⬅️ بازگشت", callback_data=f"svcback:{cid}")],
+        ])
+        if ok:
+            await query.message.reply_text("وضعیت آیتم به‌روزرسانی شد ✅", reply_markup=kb)
+        else:
+            await query.message.reply_text("به‌روزرسانی وضعیت انجام نشد.", reply_markup=kb)
+        return
+    if data.startswith("svcback:"):
+        try:
+            cid = int(data.split(":", 1)[1])
+        except Exception:
+            return
+        items_all = get_items_by_category_admin(cid) or []
+        def marker(active):
+            return "🟢" if (active or 0) != 0 else "⚪"
+        buttons = [
+            [InlineKeyboardButton(f"{marker(i['active'])} {i['title']}", callback_data=f"svcitem:{i['id']}:{cid}")]
+            for i in items_all
+        ]
+        inline_kb = InlineKeyboardMarkup(buttons) if buttons else None
+        if inline_kb:
+            await query.message.reply_text("آیتم‌های این دسته:", reply_markup=inline_kb)
+        else:
+            await query.message.reply_text("آیتمی برای این دسته ثبت نشده.")
+        return
     if data.startswith("customreq:"):
         try:
             cid = int(data.split(":", 1)[1])

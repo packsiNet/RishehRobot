@@ -1260,6 +1260,14 @@ def get_categories_active():
         )
         return [dict(r) for r in c.fetchall()]
 
+def get_categories_all():
+    with connect() as conn:
+        c = conn.cursor()
+        c.execute(
+            "SELECT id, title, description, active FROM categories ORDER BY position ASC, id ASC"
+        )
+        return [dict(r) for r in c.fetchall()]
+
 def get_category_by_title(title: str):
     with connect() as conn:
         c = conn.cursor()
@@ -1331,6 +1339,21 @@ def get_item_by_id(item_id: int):
             FROM items i
             JOIN categories c ON c.id = i.categoryid
             WHERE i.id=? AND i.active=1 AND c.active=1
+            """,
+            (item_id,),
+        )
+        row = c.fetchone()
+        return dict(row) if row else None
+
+def get_item_by_id_any(item_id: int):
+    with connect() as conn:
+        c = conn.cursor()
+        c.execute(
+            """
+            SELECT i.id, i.title, i.description, i.categoryid, i.active, c.title as category_title
+            FROM items i
+            JOIN categories c ON c.id = i.categoryid
+            WHERE i.id=?
             """,
             (item_id,),
         )
@@ -1506,6 +1529,15 @@ def get_items_by_category(category_id: int):
         )
         return [dict(r) for r in c.fetchall()]
 
+def get_items_by_category_admin(category_id: int):
+    with connect() as conn:
+        c = conn.cursor()
+        c.execute(
+            "SELECT id, categoryid, title, description, active, created_at FROM items WHERE categoryid=? ORDER BY id ASC",
+            (category_id,),
+        )
+        return [dict(r) for r in c.fetchall()]
+
 def get_items_by_category_title(title: str):
     with connect() as conn:
         c = conn.cursor()
@@ -1549,6 +1581,15 @@ def get_requests_by_category_admin(category_id: int):
             return [dict(r) for r in c.fetchall()]
         except Exception:
             return []
+
+def set_item_active(item_id: int, active: int) -> bool:
+    with connect() as conn:
+        c = conn.cursor()
+        try:
+            c.execute("UPDATE items SET active=? WHERE id=?", (1 if active else 0, item_id))
+            return c.rowcount > 0
+        except Exception:
+            return False
 
 def create_user_request(telegram_id: int, description: str, category_id: int | None = None) -> int | None:
     with connect() as conn:
