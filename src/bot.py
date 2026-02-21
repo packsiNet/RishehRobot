@@ -66,8 +66,8 @@ STATE_TUT_ADD = 2
 
 MAIN_BUTTONS = [
     ["🚀 شروع همراهی 🚀"],
-    ["🌿 ارتباط با ریشه", "🎥 آموزش تصویری"],
     ["📌 پیگیری سفارشاتم 📌"],
+    ["🌿 ارتباط با ریشه", "🎥 آموزش تصویری"],
     ["🔎 چطور به ریشه اعتماد کنم؟ 🔎"],
     ["💬 اگه نمی‌دونی؛ از من بپرس! 💬"],
 ]
@@ -480,9 +480,23 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(support_msg, reply_markup=inline_kb)
         return ConversationHandler.END
     if text == "🎥 آموزش تصویری":
-        value = get_content("about")
-        msg = value if value else "محتوای معرفی هنوز تنظیم نشده. از ادمین بخواهید /setcontent about ... را اجرا کند."
-        await update.message.reply_text(msg, reply_markup=(KB_ADMIN if is_admin(user.id) else KB_USER))
+        tuts = [t for t in get_tutorials_all() if (t.get("active") or 0) != 0]
+        if not tuts:
+            await update.message.reply_text("آموزشی برای نمایش وجود ندارد.", reply_markup=(KB_ADMIN if is_admin(user.id) else KB_USER))
+            return ConversationHandler.END
+        start = 0
+        page = tuts[start:start+10]
+        buttons = [[InlineKeyboardButton(t["title"], callback_data=f"tutview:{t['id']}")] for t in page]
+        nav = []
+        if len(tuts) > 10:
+            if start > 0:
+                nav.append(InlineKeyboardButton("◀️ قبلی", callback_data=f"tutpage:{max(0, start-10)}"))
+            if start + 10 < len(tuts):
+                nav.append(InlineKeyboardButton("▶️ بعدی", callback_data=f"tutpage:{start+10}"))
+        if nav:
+            buttons.append(nav)
+        inline_kb = InlineKeyboardMarkup(buttons)
+        await update.message.reply_text("یک آموزش را انتخاب کن:", reply_markup=inline_kb)
         return ConversationHandler.END
     # جریان مدیریت خدمات برای ادمین
     if is_admin(user.id) and context.user_data.get("svc_manage"):
@@ -689,7 +703,7 @@ def build_app():
     app.add_handler(CommandHandler("menu", menu))
     app.add_handler(CommandHandler("setcontent", setcontent))
     app.add_handler(CommandHandler("addorder", addorder))
-    app.add_handler(CallbackQueryHandler(on_item_callback, pattern=r"^(item:\d+|order:\d+|back:cat:\d+|orderinfo:\d+|ordercancel:\d+|adminorders:\d+|adminorderinfo:\d+:\d+|adminstatus:\d+:\d+|adminstatusset:\d+:\d+|adminuser:\d+|adminuserrole:\d+|adminuserblock:\d+|adminusers|customreq:\d+|adminreqs:\d+|adminreqinfo:\d+:\d+|svcitem:\d+:\d+|svcset:\d+:\d+:\d+|svcback:\d+|svcadd:\d+|tutitem:\d+|tutset:\d+:\d+|tutdel:\d+|tutback|tutadd)$"))
+    app.add_handler(CallbackQueryHandler(on_item_callback, pattern=r"^(item:\d+|order:\d+|back:cat:\d+|orderinfo:\d+|ordercancel:\d+|adminorders:\d+|adminorderinfo:\d+:\d+|adminstatus:\d+:\d+|adminstatusset:\d+:\d+|adminuser:\d+|adminuserrole:\d+|adminuserblock:\d+|adminusers|customreq:\d+|adminreqs:\d+|adminreqinfo:\d+:\d+|svcitem:\d+:\d+|svcset:\d+:\d+:\d+|svcback:\d+|svcadd:\d+|tutitem:\d+|tutset:\d+:\d+|tutdel:\d+|tutback|tutadd|tutview:\d+|tutpage:\d+)$"))
     app.add_handler(MessageHandler((filters.VIDEO | filters.Document.ALL), handle_media))
     conv = ConversationHandler(
         entry_points=[MessageHandler(filters.TEXT & ~filters.COMMAND, handle_menu)],
@@ -833,6 +847,55 @@ async def on_item_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.message.reply_text("آموزش حذف شد ✅")
         else:
             await query.message.reply_text("حذف انجام نشد.")
+        return
+    if data.startswith("tutview:"):
+        try:
+            tid = int(data.split(":", 1)[1])
+        except Exception:
+            return
+        t = get_tutorial_by_id(tid)
+        if not t or (t.get("active") or 0) == 0:
+            await query.message.reply_text("آموزش یافت نشد یا غیرفعال است.")
+            return
+        title = t.get("title") or ""
+        desc = t.get("description") or ""
+        msg = f"{title}\n\n{desc}".strip()
+        link = (t.get("filelink") or "").strip()
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton("مشاهده ویدیو", url=link)]]) if link else None
+        fp = (t.get("filepath") or "").strip()
+        if fp and os.path.isfile(fp):
+            try:
+                with open(fp, "rb") as f:
+                    await query.message.reply_video(video=f, caption=msg, reply_markup=kb)
+                return
+            except Exception:
+                pass
+        await query.message.reply_text(msg, reply_markup=kb)
+        return
+    if data.startswith("tutpage:"):
+        try:
+            start = int(data.split(":", 1)[1])
+        except Exception:
+            return
+        tuts_all = [t for t in get_tutorials_all() if (t.get("active") or 0) != 0]
+        if not tuts_all:
+            await query.message.reply_text("آموزشی برای نمایش وجود ندارد.")
+            return
+        if start < 0:
+            start = 0
+        if start >= len(tuts_all):
+            start = max(0, (len(tuts_all) - 1) // 10 * 10)
+        page = tuts_all[start:start+10]
+        buttons = [[InlineKeyboardButton(t["title"], callback_data=f"tutview:{t['id']}")] for t in page]
+        nav = []
+        if len(tuts_all) > 10:
+            if start > 0:
+                nav.append(InlineKeyboardButton("◀️ قبلی", callback_data=f"tutpage:{max(0, start-10)}"))
+            if start + 10 < len(tuts_all):
+                nav.append(InlineKeyboardButton("▶️ بعدی", callback_data=f"tutpage:{start+10}"))
+        if nav:
+            buttons.append(nav)
+        await query.message.reply_text("یک آموزش را انتخاب کن:", reply_markup=InlineKeyboardMarkup(buttons))
         return
     if data.startswith("customreq:"):
         try:
