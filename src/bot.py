@@ -56,7 +56,7 @@ from .db import (
     set_item_active,
     set_item_main,
     add_category,
-    add_item,
+    set_category_active,
     add_item,
     add_tutorial,
     get_tutorials_all,
@@ -611,8 +611,11 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 for i in items_all
             ]
             buttons.append([InlineKeyboardButton("➕ افزودن آیتم جدید", callback_data=f"svcadd:{selected['id']}")])
-            inline_kb = InlineKeyboardMarkup(buttons) if buttons else None
-            await update.message.reply_text("آیتم‌های این دسته:", reply_markup=inline_kb or KB_ADMIN)
+            any_active = any((i.get('active') or 0) != 0 for i in items_all)
+            if not any_active:
+                buttons.append([InlineKeyboardButton("🗑 حذف دسته‌بندی", callback_data=f"svcdelcat:{selected['id']}")])
+            inline_kb = InlineKeyboardMarkup(buttons)
+            await update.message.reply_text("آیتم‌های این دسته:", reply_markup=inline_kb)
             return ConversationHandler.END
         # اگر متن با هیچ دسته‌ای مطابق نبود، به منوی ادمین برگرد
         await update.message.reply_text("از لیست دسته‌ها انتخاب کن.", reply_markup=KB_ADMIN)
@@ -827,7 +830,7 @@ def build_app():
     app.add_handler(CommandHandler("menu", menu))
     app.add_handler(CommandHandler("setcontent", setcontent))
     app.add_handler(CommandHandler("addorder", addorder))
-    app.add_handler(CallbackQueryHandler(on_item_callback, pattern=r"^(item:\d+|order:\d+|back:cat:\d+|orderinfo:\d+|ordercancel:\d+|adminorders:\d+|adminorderinfo:\d+:\d+|adminstatus:\d+:\d+|adminstatusset:\d+:\d+|adminuser:\d+|adminuserrole:\d+|adminuserblock:\d+|adminusers|customreq:\d+|adminreqs:\d+|adminreqinfo:\d+:\d+|svcitem:\d+:\d+|svcset:\d+:\d+:\d+|svcmain:\d+:\d+:\d+|svcback:\d+|svcadd:\d+|tutitem:\d+|tutset:\d+:\d+|tutdel:\d+|tutback|tutadd|tutview:\d+|tutpage:\d+|checkchannel:\d+)$"))
+    app.add_handler(CallbackQueryHandler(on_item_callback, pattern=r"^(item:\d+|order:\d+|back:cat:\d+|orderinfo:\d+|ordercancel:\d+|adminorders:\d+|adminorderinfo:\d+:\d+|adminstatus:\d+:\d+|adminstatusset:\d+:\d+|adminuser:\d+|adminuserrole:\d+|adminuserblock:\d+|adminusers|customreq:\d+|adminreqs:\d+|adminreqinfo:\d+:\d+|svcitem:\d+:\d+|svcset:\d+:\d+:\d+|svcmain:\d+:\d+:\d+|svcdelcat:\d+|svcback:\d+|svcadd:\d+|tutitem:\d+|tutset:\d+:\d+|tutdel:\d+|tutback|tutadd|tutview:\d+|tutpage:\d+|checkchannel:\d+)$"))
     app.add_handler(MessageHandler((filters.VIDEO | filters.Document.ALL), handle_media))
     conv = ConversationHandler(
         entry_points=[MessageHandler(filters.TEXT & ~filters.COMMAND, handle_menu)],
@@ -937,16 +940,29 @@ async def on_item_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         items_all = get_items_by_category_admin(cid) or []
         def marker(active):
             return "🟢" if (active or 0) != 0 else "⚪"
-        buttons = [
-            [InlineKeyboardButton(f"{marker(i['active'])} {i['title']}", callback_data=f"svcitem:{i['id']}:{cid}")]
-            for i in items_all
-        ]
+        buttons = [[InlineKeyboardButton(f"{marker(i['active'])} {i['title']}", callback_data=f"svcitem:{i['id']}:{cid}")] for i in items_all]
         buttons.append([InlineKeyboardButton("➕ افزودن آیتم جدید", callback_data=f"svcadd:{cid}")])
-        inline_kb = InlineKeyboardMarkup(buttons) if buttons else None
-        if inline_kb:
-            await query.message.reply_text("آیتم‌های این دسته:", reply_markup=inline_kb)
+        any_active = any((i.get('active') or 0) != 0 for i in items_all)
+        if not any_active:
+            buttons.append([InlineKeyboardButton("🗑 حذف دسته‌بندی", callback_data=f"svcdelcat:{cid}")])
+        inline_kb = InlineKeyboardMarkup(buttons)
+        await query.message.reply_text("آیتم‌های این دسته:", reply_markup=inline_kb)
+        return
+    if data.startswith("svcdelcat:"):
+        try:
+            cid = int(data.split(":", 1)[1])
+        except Exception:
+            return
+        ok = set_category_active(cid, 0)
+        cats = get_categories_all()
+        rows = [[c["title"]] for c in cats] if cats else []
+        rows.append(["➕ افزودن دسته‌بندی جدید"])
+        rows.append([BACK_TEXT])
+        kb = ReplyKeyboardMarkup(rows, resize_keyboard=True, is_persistent=True)
+        if ok:
+            await query.message.reply_text("دسته‌بندی حذف شد ✅", reply_markup=kb)
         else:
-            await query.message.reply_text("آیتمی برای این دسته ثبت نشده.")
+            await query.message.reply_text("حذف دسته‌بندی انجام نشد.", reply_markup=kb)
         return
     if data == "tutadd":
         context.user_data["tut_new"] = {"stage": "ask_title"}

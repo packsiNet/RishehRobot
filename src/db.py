@@ -1322,6 +1322,15 @@ def add_category(title: str, description: str | None = None, position: int = 0, 
         except Exception:
             return None
 
+def set_category_active(category_id: int, active: int) -> bool:
+    with connect() as conn:
+        c = conn.cursor()
+        try:
+            c.execute("UPDATE categories SET active=? WHERE id=?", (1 if active else 0, category_id))
+            return c.rowcount > 0
+        except Exception:
+            return False
+
 def get_category_by_title(title: str):
     with connect() as conn:
         c = conn.cursor()
