@@ -326,7 +326,7 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         stage = pending_cat.get("stage")
         if text == BACK_TEXT:
             context.user_data.pop("svc_new_cat", None)
-            cats = get_categories_all()
+            cats = get_categories_active()
             rows = [[c["title"]] for c in cats] if cats else []
             rows.append(["➕ افزودن دسته‌بندی جدید"])
             rows.append([BACK_TEXT])
@@ -344,7 +344,7 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             desc = text
             context.user_data.pop("svc_new_cat", None)
             add_category(title, desc, 0, 1)
-            cats = get_categories_all()
+            cats = get_categories_active()
             rows = [[c["title"]] for c in cats] if cats else []
             rows.append(["➕ افزودن دسته‌بندی جدید"])
             rows.append([BACK_TEXT])
@@ -375,7 +375,7 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return ConversationHandler.END
         if text == "🧰 مدیریت خدمات":
             context.user_data["svc_manage"] = True
-            cats = get_categories_all()
+            cats = get_categories_active()
             rows = [[c["title"]] for c in cats] if cats else []
             rows.append(["➕ افزودن دسته‌بندی جدید"])
             rows.append([BACK_TEXT])
@@ -595,7 +595,7 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data["svc_new_cat"] = {"stage": "ask_title"}
             await update.message.reply_text("عنوان دسته‌بندی جدید را ارسال کن:")
             return ConversationHandler.END
-        cats_all = get_categories_all()
+        cats_all = get_categories_active()
         norm_text = _norm_fa(text)
         selected = None
         for c in cats_all:
@@ -958,7 +958,7 @@ async def on_item_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception:
             return
         ok = set_category_active(cid, 0)
-        cats = get_categories_all()
+        cats = get_categories_active()
         rows = [[c["title"]] for c in cats] if cats else []
         rows.append(["➕ افزودن دسته‌بندی جدید"])
         rows.append([BACK_TEXT])
@@ -974,7 +974,7 @@ async def on_item_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             iid = int(iid); cid = int(cid)
         except Exception:
             return
-        cats = get_categories_all()
+        cats = get_categories_active()
         cats = [c for c in cats if (c.get("active") or 0) != 0 and c.get("id") != cid]
         if not cats:
             await query.message.reply_text("دسته‌بندی فعالی برای انتقال وجود ندارد.")
