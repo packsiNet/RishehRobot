@@ -60,6 +60,7 @@ from .db import (
     get_tutorial_by_id,
     set_tutorial_active,
     delete_tutorial_by_id,
+    get_items_main_titles,
 )
 
 STATE_ASK_QUESTION = 1
@@ -105,6 +106,18 @@ CONTACT_MENU = ReplyKeyboardMarkup(
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s | %(message)s")
 logger = logging.getLogger("rishehbot")
+
+def user_main_kb() -> ReplyKeyboardMarkup:
+    rows = [list(r) for r in MAIN_BUTTONS]
+    try:
+        mains = get_items_main_titles()
+    except Exception:
+        mains = []
+    for it in mains:
+        t = (it.get("title") or "").strip()
+        if t:
+            rows.append([t])
+    return ReplyKeyboardMarkup(rows, resize_keyboard=True, is_persistent=True)
 
 def _norm_fa(s: str) -> str:
     if not s:
@@ -222,7 +235,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "اگه آماده‌ای این همراهی رو شروع کنی، قدم اول رو تو بردار. 👣\n"
             "✨ از منو یکی از مسیرها رو انتخاب کن تا با هم جلو بریم."
         )
-        kb = KB_USER
+        kb = user_main_kb()
     await update.message.reply_text(welcome_msg, reply_markup=kb)
     logger.info("/start handled for user_id=%s", user.id)
 
@@ -358,7 +371,7 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return ConversationHandler.END
     if text == BACK_TEXT:
         context.user_data.pop("svc_manage", None)
-        await update.message.reply_text("بازگشت به منوی اصلی.", reply_markup=(KB_ADMIN if is_admin(user.id) else KB_USER))
+        await update.message.reply_text("بازگشت به منوی اصلی.", reply_markup=(KB_ADMIN if is_admin(user.id) else user_main_kb()))
         return ConversationHandler.END
     if text in ("🌿 ارتباط با ریشه", "🌿 ارتباط با ریشه "):
         msg = (
@@ -397,7 +410,7 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             kb = ReplyKeyboardMarkup(rows, resize_keyboard=True, is_persistent=True)
             await update.message.reply_text(msg, reply_markup=kb)
         else:
-            await update.message.reply_text(msg, reply_markup=(KB_ADMIN if is_admin(user.id) else KB_USER))
+            await update.message.reply_text(msg, reply_markup=(KB_ADMIN if is_admin(user.id) else user_main_kb()))
         return ConversationHandler.END
     if text == "📌 پیگیری سفارشاتم 📌":
         msg = (
@@ -501,7 +514,7 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if text == "🔎 چطور به ریشه اعتماد کنم؟ 🔎":
         value = get_content("trust")
         msg = value if value else "محتوای اعتماد هنوز تنظیم نشده. از ادمین بخواهید /setcontent trust ... را اجرا کند."
-        await update.message.reply_text(msg, reply_markup=(KB_ADMIN if is_admin(user.id) else KB_USER))
+        await update.message.reply_text(msg, reply_markup=(KB_ADMIN if is_admin(user.id) else user_main_kb()))
         return ConversationHandler.END
     if text == "💬 اگه نمی‌دونی؛ از من بپرس! 💬":
         support_msg = (
@@ -615,19 +628,19 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         await update.message.reply_text(item.get("description") or "", reply_markup=inline_kb)
         return ConversationHandler.END
-    await update.message.reply_text("از منو انتخاب کن.", reply_markup=(KB_ADMIN if is_admin(user.id) else KB_USER))
+        await update.message.reply_text("از منو انتخاب کن.", reply_markup=(KB_ADMIN if is_admin(user.id) else user_main_kb()))
     return ConversationHandler.END
 
 async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    await update.message.reply_text("منوی اصلی نمایش داده شد.", reply_markup=(KB_ADMIN if is_admin(user.id) else KB_USER))
+    await update.message.reply_text("منوی اصلی نمایش داده شد.", reply_markup=(KB_ADMIN if is_admin(user.id) else user_main_kb()))
 
 
 async def receive_question(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.message.text.strip()
     user = update.effective_user
     create_ticket(user.id, q)
-    await update.message.reply_text("سوالت ثبت شد. به‌زودی پاسخ می‌دیم.", reply_markup=(KB_ADMIN if is_admin(user.id) else KB_USER))
+    await update.message.reply_text("سوالت ثبت شد. به‌زودی پاسخ می‌دیم.", reply_markup=(KB_ADMIN if is_admin(user.id) else user_main_kb()))
     logger.info("ticket created user_id=%s", user.id)
     return ConversationHandler.END
 

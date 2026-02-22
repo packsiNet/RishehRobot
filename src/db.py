@@ -194,12 +194,24 @@ def init_db():
                 categoryid INTEGER NOT NULL,
                 title TEXT NOT NULL,
                 description TEXT,
+                ismain INTEGER NOT NULL DEFAULT 0,
                 active INTEGER DEFAULT 1,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY(categoryid) REFERENCES categories(id)
             )
             """
         )
+        # Backward compatibility: add ismain if missing
+        try:
+            it_cols = _table_columns(conn, "items")
+            if "ismain" not in it_cols:
+                c.execute("ALTER TABLE items ADD COLUMN ismain INTEGER NOT NULL DEFAULT 0")
+                try:
+                    c.execute("UPDATE items SET ismain=0 WHERE ismain IS NULL")
+                except Exception:
+                    pass
+        except Exception:
+            pass
         c.execute("CREATE INDEX IF NOT EXISTS idx_items_categoryid ON items(categoryid)")
         c.execute(
             """
@@ -1560,10 +1572,27 @@ def get_items_by_category_title(title: str):
             return []
         cat_id = row["id"]
         c.execute(
-            "SELECT id, categoryid, title, description, active, created_at FROM items WHERE categoryid=? AND active=1 ORDER BY id ASC",
+            "SELECT id, categoryid, title, description, ismain, active, created_at FROM items WHERE categoryid=? AND active=1 AND ismain=0 ORDER BY id ASC",
             (cat_id,),
         )
         return [dict(r) for r in c.fetchall()]
+
+def get_items_main_titles() -> list[dict]:
+    with connect() as conn:
+        c = conn.cursor()
+        try:
+            c.execute(
+                """
+                SELECT i.id, i.title
+                FROM items i
+                JOIN categories c ON c.id = i.categoryid
+                WHERE i.ismain = 1 AND i.active = 1 AND c.active = 1
+                ORDER BY i.id ASC
+                """
+            )
+            return [dict(r) for r in c.fetchall()]
+        except Exception:
+            return []
 
 def get_request_count_by_category(category_id: int) -> int:
     with connect() as conn:
