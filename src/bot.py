@@ -55,6 +55,8 @@ from .db import (
     get_items_by_category_admin,
     set_item_active,
     set_item_main,
+    add_category,
+    add_item,
     add_item,
     add_tutorial,
     get_tutorials_all,
@@ -245,6 +247,7 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     pending_new = context.user_data.get("svc_new_item")
     pending_tut = context.user_data.get("tut_new")
+    pending_cat = context.user_data.get("svc_new_cat")
     if pending_new:
         stage = pending_new.get("stage")
         cid = pending_new.get("cat_id")
@@ -317,6 +320,36 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             buttons.append([InlineKeyboardButton("➕ افزودن آموزش جدید", callback_data="tutadd")])
             await update.message.reply_text("آموزش جدید ذخیره شد ✅", reply_markup=InlineKeyboardMarkup(buttons) if buttons else KB_ADMIN)
             return ConversationHandler.END
+    # فرآیند افزودن دسته‌بندی جدید
+    if pending_cat:
+        stage = pending_cat.get("stage")
+        if text == BACK_TEXT:
+            context.user_data.pop("svc_new_cat", None)
+            cats = get_categories_all()
+            rows = [[c["title"]] for c in cats] if cats else []
+            rows.append(["➕ افزودن دسته‌بندی جدید"])
+            rows.append([BACK_TEXT])
+            kb = ReplyKeyboardMarkup(rows, resize_keyboard=True, is_persistent=True)
+            await update.message.reply_text("یک دسته‌بندی خدمات را انتخاب کن:", reply_markup=kb)
+            return ConversationHandler.END
+        if stage == "ask_title":
+            pending_cat["title"] = text
+            pending_cat["stage"] = "ask_desc"
+            context.user_data["svc_new_cat"] = pending_cat
+            await update.message.reply_text("توضیحات دسته را ارسال کن:")
+            return ConversationHandler.END
+        if stage == "ask_desc":
+            title = (pending_cat.get("title") or "").strip()
+            desc = text
+            context.user_data.pop("svc_new_cat", None)
+            add_category(title, desc, 0, 1)
+            cats = get_categories_all()
+            rows = [[c["title"]] for c in cats] if cats else []
+            rows.append(["➕ افزودن دسته‌بندی جدید"])
+            rows.append([BACK_TEXT])
+            kb = ReplyKeyboardMarkup(rows, resize_keyboard=True, is_persistent=True)
+            await update.message.reply_text("دسته‌بندی جدید ذخیره شد ✅", reply_markup=kb)
+            return ConversationHandler.END
     pending_cat = context.user_data.pop("awaiting_custom_request", None)
     if pending_cat is not None:
         try:
@@ -342,7 +375,9 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if text == "🧰 مدیریت خدمات":
             context.user_data["svc_manage"] = True
             cats = get_categories_all()
-            rows = [[c["title"]] for c in cats] + [[BACK_TEXT]] if cats else [[BACK_TEXT]]
+            rows = [[c["title"]] for c in cats] if cats else []
+            rows.append(["➕ افزودن دسته‌بندی جدید"])
+            rows.append([BACK_TEXT])
             kb = ReplyKeyboardMarkup(rows, resize_keyboard=True, is_persistent=True)
             await update.message.reply_text("یک دسته‌بندی خدمات را انتخاب کن:", reply_markup=kb)
             return ConversationHandler.END
@@ -554,6 +589,11 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
     # جریان مدیریت خدمات برای ادمین
     if is_admin(user.id) and context.user_data.get("svc_manage"):
+        # افزودن دسته‌بندی جدید
+        if text == "➕ افزودن دسته‌بندی جدید":
+            context.user_data["svc_new_cat"] = {"stage": "ask_title"}
+            await update.message.reply_text("عنوان دسته‌بندی جدید را ارسال کن:")
+            return ConversationHandler.END
         cats_all = get_categories_all()
         norm_text = _norm_fa(text)
         selected = None

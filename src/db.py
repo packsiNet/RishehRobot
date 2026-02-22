@@ -1293,6 +1293,35 @@ def get_categories_all():
         )
         return [dict(r) for r in c.fetchall()]
 
+def add_category(title: str, description: str | None = None, position: int = 0, active: int = 1) -> int | None:
+    with connect() as conn:
+        c = conn.cursor()
+        try:
+            c.execute(
+                """
+                INSERT INTO categories (title, description, position, active)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(title) DO UPDATE SET description=excluded.description
+                """,
+                (title, description, position, active),
+            )
+        except Exception:
+            try:
+                c.execute(
+                    "INSERT OR IGNORE INTO categories (title, description, position, active) VALUES (?, ?, ?, ?)",
+                    (title, description, position, active),
+                )
+                if c.rowcount == 0:
+                    c.execute("UPDATE categories SET description=? WHERE title=?", (description, title))
+            except Exception:
+                return None
+        try:
+            c.execute("SELECT id FROM categories WHERE title=?", (title,))
+            r = c.fetchone()
+            return int(r["id"]) if r else None
+        except Exception:
+            return None
+
 def get_category_by_title(title: str):
     with connect() as conn:
         c = conn.cursor()
