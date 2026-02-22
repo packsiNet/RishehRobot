@@ -54,6 +54,7 @@ from .db import (
     get_requests_by_category_admin,
     get_items_by_category_admin,
     set_item_active,
+    set_item_main,
     add_item,
     add_tutorial,
     get_tutorials_all,
@@ -773,7 +774,7 @@ def build_app():
     app.add_handler(CommandHandler("menu", menu))
     app.add_handler(CommandHandler("setcontent", setcontent))
     app.add_handler(CommandHandler("addorder", addorder))
-    app.add_handler(CallbackQueryHandler(on_item_callback, pattern=r"^(item:\d+|order:\d+|back:cat:\d+|orderinfo:\d+|ordercancel:\d+|adminorders:\d+|adminorderinfo:\d+:\d+|adminstatus:\d+:\d+|adminstatusset:\d+:\d+|adminuser:\d+|adminuserrole:\d+|adminuserblock:\d+|adminusers|customreq:\d+|adminreqs:\d+|adminreqinfo:\d+:\d+|svcitem:\d+:\d+|svcset:\d+:\d+:\d+|svcback:\d+|svcadd:\d+|tutitem:\d+|tutset:\d+:\d+|tutdel:\d+|tutback|tutadd|tutview:\d+|tutpage:\d+|checkchannel:\d+)$"))
+    app.add_handler(CallbackQueryHandler(on_item_callback, pattern=r"^(item:\d+|order:\d+|back:cat:\d+|orderinfo:\d+|ordercancel:\d+|adminorders:\d+|adminorderinfo:\d+:\d+|adminstatus:\d+:\d+|adminstatusset:\d+:\d+|adminuser:\d+|adminuserrole:\d+|adminuserblock:\d+|adminusers|customreq:\d+|adminreqs:\d+|adminreqinfo:\d+:\d+|svcitem:\d+:\d+|svcset:\d+:\d+:\d+|svcmain:\d+:\d+:\d+|svcback:\d+|svcadd:\d+|tutitem:\d+|tutset:\d+:\d+|tutdel:\d+|tutback|tutadd|tutview:\d+|tutpage:\d+|checkchannel:\d+)$"))
     app.add_handler(MessageHandler((filters.VIDEO | filters.Document.ALL), handle_media))
     conv = ConversationHandler(
         entry_points=[MessageHandler(filters.TEXT & ~filters.COMMAND, handle_menu)],
@@ -802,14 +803,22 @@ async def on_item_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.message.reply_text("آیتم یافت نشد.")
             return
         active = (it.get("active") or 0) != 0
+        ismain = (it.get("ismain") or 0) != 0
         toggle_label = "غیرفعال کردن" if active else "فعال کردن"
         toggle_to = 0 if active else 1
+        main_label = "حذف از منوی اصلی" if ismain else "افزودن به منوی اصلی"
+        main_to = 0 if ismain else 1
         kb = InlineKeyboardMarkup([
             [InlineKeyboardButton(toggle_label, callback_data=f"svcset:{it['id']}:{toggle_to}:{cid}")],
+            [InlineKeyboardButton(main_label, callback_data=f"svcmain:{it['id']}:{main_to}:{cid}")],
             [InlineKeyboardButton("⬅️ بازگشت", callback_data=f"svcback:{cid}")],
         ])
         status_txt = "فعال" if active else "غیرفعال"
-        await query.message.reply_text(f"مدیریت آیتم: {it.get('title') or ''}\nوضعیت فعلی: {status_txt}", reply_markup=kb)
+        main_txt = "بله" if ismain else "خیر"
+        await query.message.reply_text(
+            f"مدیریت آیتم: {it.get('title') or ''}\nوضعیت فعلی: {status_txt}\nدر منوی اصلی: {main_txt}",
+            reply_markup=kb,
+        )
         return
     if data.startswith("svcadd:"):
         try:
@@ -828,16 +837,44 @@ async def on_item_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ok = set_item_active(iid, val)
         it = get_item_by_id_any(iid)
         active = (it.get("active") or 0) != 0 if it else (val != 0)
+        ismain = (it.get("ismain") or 0) != 0 if it else False
         toggle_label = "غیرفعال کردن" if active else "فعال کردن"
         toggle_to = 0 if active else 1
+        main_label = "حذف از منوی اصلی" if ismain else "افزودن به منوی اصلی"
+        main_to = 0 if ismain else 1
         kb = InlineKeyboardMarkup([
             [InlineKeyboardButton(toggle_label, callback_data=f"svcset:{iid}:{toggle_to}:{cid}")],
+            [InlineKeyboardButton(main_label, callback_data=f"svcmain:{iid}:{main_to}:{cid}")],
             [InlineKeyboardButton("⬅️ بازگشت", callback_data=f"svcback:{cid}")],
         ])
         if ok:
             await query.message.reply_text("وضعیت آیتم به‌روزرسانی شد ✅", reply_markup=kb)
         else:
             await query.message.reply_text("به‌روزرسانی وضعیت انجام نشد.", reply_markup=kb)
+        return
+    if data.startswith("svcmain:"):
+        try:
+            _, iid, val, cid = data.split(":", 3)
+            iid = int(iid); val = int(val); cid = int(cid)
+        except Exception:
+            return
+        ok = set_item_main(iid, val)
+        it = get_item_by_id_any(iid)
+        active = (it.get("active") or 0) != 0 if it else True
+        ismain = (it.get("ismain") or 0) != 0 if it else (val != 0)
+        toggle_label = "غیرفعال کردن" if active else "فعال کردن"
+        toggle_to = 0 if active else 1
+        main_label = "حذف از منوی اصلی" if ismain else "افزودن به منوی اصلی"
+        main_to = 0 if ismain else 1
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton(toggle_label, callback_data=f"svcset:{iid}:{toggle_to}:{cid}")],
+            [InlineKeyboardButton(main_label, callback_data=f"svcmain:{iid}:{main_to}:{cid}")],
+            [InlineKeyboardButton("⬅️ بازگشت", callback_data=f"svcback:{cid}")],
+        ])
+        if ok:
+            await query.message.reply_text("منوی اصلی آیتم به‌روزرسانی شد ✅", reply_markup=kb)
+        else:
+            await query.message.reply_text("به‌روزرسانی منوی اصلی انجام نشد.", reply_markup=kb)
         return
     if data.startswith("svcback:"):
         try:

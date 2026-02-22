@@ -1375,7 +1375,7 @@ def get_item_by_id_any(item_id: int):
         c = conn.cursor()
         c.execute(
             """
-            SELECT i.id, i.title, i.description, i.categoryid, i.active, c.title as category_title
+            SELECT i.id, i.title, i.description, i.categoryid, i.active, i.ismain, c.title as category_title
             FROM items i
             JOIN categories c ON c.id = i.categoryid
             WHERE i.id=?
@@ -1384,6 +1384,15 @@ def get_item_by_id_any(item_id: int):
         )
         row = c.fetchone()
         return dict(row) if row else None
+
+def set_item_main(item_id: int, ismain: int) -> bool:
+    with connect() as conn:
+        c = conn.cursor()
+        try:
+            c.execute("UPDATE items SET ismain=? WHERE id=?", (1 if ismain else 0, item_id))
+            return c.rowcount > 0
+        except Exception:
+            return False
 
 def get_orders_by_item_admin(item_id: int):
     with connect() as conn:
