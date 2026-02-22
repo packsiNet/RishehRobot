@@ -975,7 +975,7 @@ async def on_item_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception:
             return
         cats = get_categories_active()
-        cats = [c for c in cats if (c.get("active") or 0) != 0 and c.get("id") != cid]
+        cats = [c for c in cats if c.get("id") != cid]
         if not cats:
             await query.message.reply_text("دسته‌بندی فعالی برای انتقال وجود ندارد.")
             return
