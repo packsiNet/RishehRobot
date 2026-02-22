@@ -1558,7 +1558,7 @@ def get_items_by_category(category_id: int):
     with connect() as conn:
         c = conn.cursor()
         c.execute(
-            "SELECT id, categoryid, title, description, active, created_at FROM items WHERE categoryid=? AND active=1 ORDER BY id ASC",
+            "SELECT id, categoryid, title, description, active, created_at FROM items WHERE categoryid=? AND active=1 AND ismain=0 ORDER BY id ASC",
             (category_id,),
         )
         return [dict(r) for r in c.fetchall()]
@@ -1581,7 +1581,7 @@ def get_items_by_category_title(title: str):
             return []
         cat_id = row["id"]
         c.execute(
-            "SELECT id, categoryid, title, description, ismain, active, created_at FROM items WHERE categoryid=? AND active=1 AND ismain=0 ORDER BY id ASC",
+            "SELECT id, categoryid, title, description, active, created_at FROM items WHERE categoryid=? AND active=1 AND ismain=0 ORDER BY id ASC",
             (cat_id,),
         )
         return [dict(r) for r in c.fetchall()]
