@@ -623,10 +623,17 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return ConversationHandler.END
     item = get_item_by_title(text)
     if item:
+        buttons = [[InlineKeyboardButton("✅ ثبت سفارش", callback_data=f"order:{item['id']}")]]
         same_items = get_items_by_category_title(item["category_title"]) or []
-        inline_kb = InlineKeyboardMarkup(
-            [[InlineKeyboardButton(i["title"], callback_data=f"item:{i['id']}")] for i in same_items]
-        )
+        if same_items:
+            buttons.extend([[InlineKeyboardButton(i["title"], callback_data=f"item:{i['id']}")] for i in same_items])
+        try:
+            cat_id = item.get("categoryid")
+            if cat_id is not None:
+                buttons.append([InlineKeyboardButton("⬅️ بازگشت", callback_data=f"back:cat:{cat_id}")])
+        except Exception:
+            pass
+        inline_kb = InlineKeyboardMarkup(buttons)
         await update.message.reply_text(item.get("description") or "", reply_markup=inline_kb)
         return ConversationHandler.END
         await update.message.reply_text("از منو انتخاب کن.", reply_markup=(KB_ADMIN if is_admin(user.id) else user_main_kb()))
