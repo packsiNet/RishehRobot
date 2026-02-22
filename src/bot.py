@@ -623,6 +623,12 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return ConversationHandler.END
     item = get_item_by_title(text)
     if item:
+        # اگر از منوی اصلی باشد (ismain=1)، فقط دکمه ثبت سفارش نمایش داده شود
+        is_main = (item.get("ismain") or 0) != 0
+        if is_main:
+            inline_kb = InlineKeyboardMarkup([[InlineKeyboardButton("✅ ثبت سفارش", callback_data=f"order:{item['id']}")]])
+            await update.message.reply_text(item.get("description") or "", reply_markup=inline_kb)
+            return ConversationHandler.END
         buttons = [[InlineKeyboardButton("✅ ثبت سفارش", callback_data=f"order:{item['id']}")]]
         same_items = get_items_by_category_title(item["category_title"]) or []
         if same_items:

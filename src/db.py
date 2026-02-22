@@ -1305,7 +1305,7 @@ def get_item_by_title(title: str):
         c = conn.cursor()
         c.execute(
             """
-            SELECT i.id, i.title, i.description, i.categoryid, c.title as category_title
+            SELECT i.id, i.title, i.description, i.categoryid, i.ismain, c.title as category_title
             FROM items i
             JOIN categories c ON c.id = i.categoryid
             WHERE i.title=? AND i.active=1 AND c.active=1
