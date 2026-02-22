@@ -1331,6 +1331,15 @@ def set_category_active(category_id: int, active: int) -> bool:
         except Exception:
             return False
 
+def move_item_to_category(item_id: int, new_category_id: int) -> bool:
+    with connect() as conn:
+        c = conn.cursor()
+        try:
+            c.execute("UPDATE items SET categoryid=? WHERE id=?", (new_category_id, item_id))
+            return c.rowcount > 0
+        except Exception:
+            return False
+
 def get_category_by_title(title: str):
     with connect() as conn:
         c = conn.cursor()
